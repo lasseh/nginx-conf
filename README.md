@@ -52,6 +52,6 @@
 Create a letsencrypt/ssl-enabled/domain.com.ini config for every site with acme auto renew
 
 #### /etc/crontab.d/acme
-``sh
+```sh
 30 2 * * 1 /etc/nginx/letsencrypt/ssl-renew >> /var/log/ssl-renewal.log
 ```
