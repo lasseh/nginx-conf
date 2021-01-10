@@ -1,4 +1,4 @@
-# Webhuset NGiNX Config
+# Lasse's NGiNX Config
 ## Structure
 ```tree
 ├── letsencrypt
