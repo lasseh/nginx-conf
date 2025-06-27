@@ -21,6 +21,7 @@ A production-ready, security-hardened nginx configuration optimized for 2025 sta
 ### Architecture
 - **Modular Design**: Separated configuration files for maintainability
 - **Environment Flexibility**: Easy adaptation for different deployment scenarios
+- **API Gateway Ready**: Complete example for microservices routing
 - **Monitoring Ready**: Structured logging and performance metrics
 - **Documentation**: Comprehensive inline comments and external docs
 
@@ -42,6 +43,8 @@ nginx-new/
 │   ├── letsencrypt.conf       # Let's Encrypt ACME challenge
 │   ├── websocket.conf         # WebSocket proxy configuration
 │   └── stub-status.conf       # Nginx status endpoint
+├── sites-available/           # Available site configurations
+│   └── api-gateway.example.com.conf  # API Gateway example
 ├── sites-enabled/             # Virtual host configurations
 │   ├── defaults-80.conf       # Default HTTP server
 │   ├── whynoipv6.com.conf     # Example production site
@@ -49,6 +52,9 @@ nginx-new/
 ├── sites-security/            # Site-specific security configs
 │   ├── whynoipv6.com.conf     # Security headers for main site
 │   └── ipv6.fail.conf         # Security headers for test site
+├── docs/                      # Documentation
+│   ├── API-GATEWAY-SETUP.md   # API Gateway configuration guide
+│   └── API-GATEWAY-DIAGRAM.md # Architecture diagrams
 ├── IMPROVEMENTS.md            # Detailed changelog and improvements
 └── README.md                  # This file
 ```
@@ -106,6 +112,7 @@ nginx -V 2>&1 | grep -o with-http_v2_module
    sudo cp -r prefabs.d/ /etc/nginx/
    sudo cp -r sites-enabled/ /etc/nginx/
    sudo cp -r sites-security/ /etc/nginx/
+   sudo cp -r docs/ /etc/nginx/
    ```
 
 3. **Customize for your environment:**
@@ -175,6 +182,45 @@ nginx -V 2>&1 | grep -o with-http_v2_module
    ```bash
    sudo cp /etc/nginx/sites-security/whynoipv6.com.conf /etc/nginx/sites-security/yoursite.com.conf
    ```
+
+### Setting Up an API Gateway
+
+For microservices architecture, use the included API gateway example:
+
+1. **Copy the API gateway configuration:**
+   ```bash
+   sudo cp /etc/nginx/sites-available/api-gateway.example.com.conf /etc/nginx/sites-available/api.yourdomain.com.conf
+   ```
+
+2. **Customize for your services:**
+   ```bash
+   # Edit the configuration
+   sudo nano /etc/nginx/sites-available/api.yourdomain.com.conf
+   
+   # Update domain name
+   sudo sed -i 's/api\.example\.com/api.yourdomain.com/g' /etc/nginx/sites-available/api.yourdomain.com.conf
+   ```
+
+3. **Configure your backend services:**
+   ```nginx
+   upstream auth_service {
+       server 127.0.0.1:3001;    # Your authentication service
+       keepalive 32;
+   }
+   
+   upstream user_service {
+       server 127.0.0.1:8001;    # Your user management service
+       keepalive 32;
+   }
+   ```
+
+4. **Enable the API gateway:**
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/api.yourdomain.com.conf /etc/nginx/sites-enabled/
+   sudo nginx -t && sudo nginx -s reload
+   ```
+
+**📖 For detailed API gateway setup, see [docs/API-GATEWAY-SETUP.md](docs/API-GATEWAY-SETUP.md)**
 
 ### Rate Limiting Configuration
 
