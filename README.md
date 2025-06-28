@@ -30,7 +30,7 @@ A production-ready, security-hardened nginx configuration optimized for 2025 sta
 ```
 nginx-new/
 ├── nginx.conf                 # Main configuration file
-├── nginx.d/                   # Core configuration modules
+├── conf.d/                   # Core configuration modules
 │   ├── security.conf          # Security headers and policies
 │   ├── general.conf           # General settings and compression
 │   ├── performance.conf       # Performance optimizations
@@ -39,7 +39,7 @@ nginx-new/
 │   ├── cloudflare.conf        # Cloudflare IP ranges
 │   ├── logformat.conf         # Custom log formats
 │   └── mime.types             # MIME type definitions
-├── prefabs.d/                 # Reusable configuration blocks
+├── snippets/                 # Reusable configuration blocks
 │   ├── letsencrypt.conf       # Let's Encrypt ACME challenge
 │   ├── websocket.conf         # WebSocket proxy configuration
 │   └── stub-status.conf       # Nginx status endpoint
@@ -110,8 +110,8 @@ nginx -V 2>&1 | grep -o with-http_v2_module
    
    # Copy configuration files
    sudo cp nginx.conf /etc/nginx/
-   sudo cp -r nginx.d/ /etc/nginx/
-   sudo cp -r prefabs.d/ /etc/nginx/
+   sudo cp -r conf.d/ /etc/nginx/
+   sudo cp -r snippets/ /etc/nginx/
    sudo cp -r sites-enabled/ /etc/nginx/
    sudo cp -r sites-security/ /etc/nginx/
    sudo cp -r docs/ /etc/nginx/
@@ -161,11 +161,11 @@ nginx -V 2>&1 | grep -o with-http_v2_module
        ssl_trusted_certificate /etc/letsencrypt/live/yoursite.com/chain.pem;
        
        # Include security and performance configs
-       include                 nginx.d/tls-intermediate.conf;
+       include                 conf.d/tls-intermediate.conf;
        include                 sites-security/yoursite.com.conf;
-       include                 nginx.d/general.conf;
-       include                 nginx.d/performance.conf;
-       include                 nginx.d/cloudflare.conf;
+       include                 conf.d/general.conf;
+       include                 conf.d/performance.conf;
+       include                 conf.d/cloudflare.conf;
        
        # Your application configuration
        location / {
@@ -175,7 +175,7 @@ nginx -V 2>&1 | grep -o with-http_v2_module
            
            # Or proxy to application
            # proxy_pass http://localhost:3000;
-           # include nginx.d/proxy.conf;
+           # include conf.d/proxy.conf;
        }
    }
    ```
@@ -283,7 +283,7 @@ location /api/ {
 
 ### Security Headers Customization
 
-Edit `/etc/nginx/nginx.d/security.conf` for your needs:
+Edit `/etc/nginx/conf.d/security.conf` for your needs:
 
 ```nginx
 # Customize CSP for your application
@@ -334,7 +334,7 @@ If your nginx doesn't support HTTP/3:
 
 2. **Enable in configuration:**
    ```nginx
-   # Uncomment in /etc/nginx/nginx.d/general.conf
+   # Uncomment in /etc/nginx/conf.d/general.conf
    brotli          on;
    brotli_comp_level 6;
    brotli_types    text/plain text/css application/json application/javascript;
@@ -378,12 +378,12 @@ If your nginx doesn't support HTTP/3:
 1. **Enable status endpoint:**
    ```nginx
    # Include in server block
-   include prefabs.d/stub-status.conf;
+   include snippets/stub-status.conf;
    ```
 
 2. **Custom log formats:**
    ```nginx
-   # Already configured in nginx.d/logformat.conf
+   # Already configured in conf.d/logformat.conf
    access_log /var/log/nginx/access.log prettycloud;
    ```
 
@@ -437,7 +437,7 @@ ab -n 1000 -c 10 https://yoursite.com/
    # Automated script (run monthly)
    curl -s https://www.cloudflare.com/ips-v4 > /tmp/cf-ips-v4
    curl -s https://www.cloudflare.com/ips-v6 > /tmp/cf-ips-v6
-   # Update nginx.d/cloudflare.conf with new ranges
+   # Update conf.d/cloudflare.conf with new ranges
    ```
 
 2. **Monitor SSL certificate expiry:**

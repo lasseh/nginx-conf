@@ -165,7 +165,7 @@ location /notifications/ {
     limit_req               zone=notification_api burst=25 nodelay;
     rewrite                 ^/notifications/(.*)$ /$1 break;
     proxy_pass              http://notification_service;
-    include                 nginx.d/proxy.conf;
+    include                 conf.d/proxy.conf;
     proxy_set_header        X-Service "notifications";
 }
 ```
@@ -196,7 +196,7 @@ location /users/profile {
     }
     
     proxy_pass http://user_service;
-    include nginx.d/proxy.conf;
+    include conf.d/proxy.conf;
 }
 ```
 
@@ -210,7 +210,7 @@ location /orders/ {
     
     limit_req zone=order_api burst=30 nodelay;
     proxy_pass http://order_service;
-    include nginx.d/proxy.conf;
+    include conf.d/proxy.conf;
 }
 
 # Internal auth verification endpoint
@@ -227,7 +227,7 @@ location = /auth/verify {
 
 ### Custom Log Format
 
-Add to `nginx.d/logformat.conf`:
+Add to `conf.d/logformat.conf`:
 
 ```nginx
 log_format api_gateway '$remote_addr - $remote_user [$time_local] '
@@ -284,7 +284,7 @@ location /admin/ {
     }
     
     proxy_pass http://admin_service;
-    include nginx.d/proxy.conf;
+    include conf.d/proxy.conf;
 }
 ```
 
@@ -298,7 +298,7 @@ location /admin/ {
     deny all;
     
     proxy_pass http://admin_service;
-    include nginx.d/proxy.conf;
+    include conf.d/proxy.conf;
 }
 ```
 

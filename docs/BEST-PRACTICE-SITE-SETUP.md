@@ -157,7 +157,7 @@ location /api/ {
     limit_req zone=general burst=20 nodelay;
     rewrite ^/api/(.*)$ /$1 break;
     proxy_pass http://backend_app;
-    include nginx.d/proxy.conf;
+    include conf.d/proxy.conf;
 }
 ```
 
@@ -285,7 +285,7 @@ location / {
     auth_basic_user_file /etc/nginx/.htpasswd;
     
     proxy_pass http://admin_app;
-    include nginx.d/proxy.conf;
+    include conf.d/proxy.conf;
 }
 ```
 
@@ -363,7 +363,7 @@ location /api/upload/ {
 
 ### Custom Log Formats
 
-Add to `nginx.d/logformat.conf`:
+Add to `conf.d/logformat.conf`:
 
 ```nginx
 # Detailed logging for main site

@@ -7,7 +7,7 @@ This document explains the file structure and organization of this nginx configu
 ```
 nginx-new/
 ├── nginx.conf                          # Main nginx configuration file
-├── nginx.d/                            # Core configuration modules
+├── conf.d/                            # Core configuration modules
 │   ├── cloudflare.conf                 # Cloudflare IP ranges for real IP detection
 │   ├── general.conf                    # General settings, compression, static caching
 │   ├── logformat.conf                  # Custom log formats
@@ -16,7 +16,7 @@ nginx-new/
 │   ├── proxy.conf                      # Proxy settings and headers
 │   ├── security.conf                   # Security headers and policies
 │   └── tls-intermediate.conf           # SSL/TLS configuration (Mozilla Intermediate)
-├── prefabs.d/                          # Reusable configuration blocks
+├── snippets/                          # Reusable configuration blocks
 │   ├── letsencrypt.conf                # Let's Encrypt ACME challenge handling
 │   ├── stub-status.conf                # Nginx status endpoint
 │   └── websocket.conf                  # WebSocket proxy configuration
@@ -49,7 +49,7 @@ nginx-new/
 - Includes rate limiting zones
 - References other configuration files via include directives
 
-### Module Configurations (`nginx.d/`)
+### Module Configurations (`conf.d/`)
 
 #### `security.conf`
 - Modern security headers (HSTS, CSP, CORS, etc.)
@@ -93,7 +93,7 @@ nginx-new/
 #### `mime.types`
 - MIME type definitions for file extensions
 
-### Prefab Configurations (`prefabs.d/`)
+### Prefab Configurations (`snippets/`)
 
 #### `letsencrypt.conf`
 - Let's Encrypt ACME challenge handling
@@ -127,10 +127,10 @@ nginx-new/
 ### Main Configuration Includes
 ```nginx
 # In nginx.conf
-include nginx.d/mime.types;                    # MIME types
-include nginx.d/logformat.conf;                # Log formats
-include nginx.d/tls-intermediate.conf;         # TLS settings
-include prefabs.d/websocket.conf;              # WebSocket support
+include conf.d/mime.types;                    # MIME types
+include conf.d/logformat.conf;                # Log formats
+include conf.d/tls-intermediate.conf;         # TLS settings
+include snippets/websocket.conf;              # WebSocket support
 include /etc/nginx/modules-enabled/*.conf;     # Dynamic modules
 include /etc/nginx/sites-enabled/*.conf;       # Active sites
 ```
@@ -138,14 +138,14 @@ include /etc/nginx/sites-enabled/*.conf;       # Active sites
 ### Site Configuration Includes
 ```nginx
 # In site configurations
-include nginx.d/tls-intermediate.conf;         # TLS settings
+include conf.d/tls-intermediate.conf;         # TLS settings
 include sites-security/example-site.com.conf;  # Site-specific security
-include nginx.d/general.conf;                  # General settings
-include nginx.d/performance.conf;              # Performance optimizations
-include nginx.d/cloudflare.conf;               # Cloudflare IP ranges
-include nginx.d/proxy.conf;                    # Proxy settings (when needed)
-include prefabs.d/letsencrypt.conf;            # ACME challenge (HTTP servers)
-include prefabs.d/websocket.conf;              # WebSocket support (when needed)
+include conf.d/general.conf;                  # General settings
+include conf.d/performance.conf;              # Performance optimizations
+include conf.d/cloudflare.conf;               # Cloudflare IP ranges
+include conf.d/proxy.conf;                    # Proxy settings (when needed)
+include snippets/letsencrypt.conf;            # ACME challenge (HTTP servers)
+include snippets/websocket.conf;              # WebSocket support (when needed)
 ```
 
 ## 📋 File Naming Conventions
@@ -160,8 +160,8 @@ include prefabs.d/websocket.conf;              # WebSocket support (when needed)
 - Prefabs: `purpose.conf` (e.g., `letsencrypt.conf`, `websocket.conf`)
 
 ### Directory Purposes
-- `nginx.d/`: Core nginx functionality modules
-- `prefabs.d/`: Reusable configuration blocks
+- `conf.d/`: Core nginx functionality modules
+- `snippets/`: Reusable configuration blocks
 - `sites-available/`: Template/example configurations
 - `sites-enabled/`: Active site configurations
 - `sites-security/`: Site-specific security policies
@@ -171,15 +171,15 @@ include prefabs.d/websocket.conf;              # WebSocket support (when needed)
 ### Development/Testing
 ```bash
 # Use relative paths (as in repository)
-include nginx.d/security.conf;
+include conf.d/security.conf;
 include sites-security/example-site.com.conf;
 ```
 
 ### Production Deployment
 ```bash
 # Copy to /etc/nginx/ and use relative paths
-sudo cp -r nginx.d/ /etc/nginx/
-sudo cp -r prefabs.d/ /etc/nginx/
+sudo cp -r conf.d/ /etc/nginx/
+sudo cp -r snippets/ /etc/nginx/
 sudo cp -r sites-security/ /etc/nginx/
 sudo cp sites-available/example-site.com.conf /etc/nginx/sites-available/
 sudo ln -s /etc/nginx/sites-available/example-site.com.conf /etc/nginx/sites-enabled/
@@ -210,23 +210,23 @@ find /etc/nginx -name "*.conf" -type f
 ### Core Dependencies
 ```
 nginx.conf
-├── nginx.d/mime.types
-├── nginx.d/logformat.conf
-├── nginx.d/tls-intermediate.conf
-├── prefabs.d/websocket.conf
+├── conf.d/mime.types
+├── conf.d/logformat.conf
+├── conf.d/tls-intermediate.conf
+├── snippets/websocket.conf
 └── sites-enabled/*.conf
-    ├── nginx.d/tls-intermediate.conf
+    ├── conf.d/tls-intermediate.conf
     ├── sites-security/*.conf
-    ├── nginx.d/general.conf
-    ├── nginx.d/performance.conf
-    ├── nginx.d/cloudflare.conf
-    └── nginx.d/proxy.conf (conditional)
+    ├── conf.d/general.conf
+    ├── conf.d/performance.conf
+    ├── conf.d/cloudflare.conf
+    └── conf.d/proxy.conf (conditional)
 ```
 
 ### Optional Dependencies
-- `prefabs.d/letsencrypt.conf` (for ACME challenges)
-- `prefabs.d/websocket.conf` (for WebSocket support)
-- `prefabs.d/stub-status.conf` (for monitoring)
+- `snippets/letsencrypt.conf` (for ACME challenges)
+- `snippets/websocket.conf` (for WebSocket support)
+- `snippets/stub-status.conf` (for monitoring)
 
 ## 🚀 Best Practices
 
