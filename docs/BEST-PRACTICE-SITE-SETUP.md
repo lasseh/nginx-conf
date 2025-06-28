@@ -6,11 +6,6 @@ This guide explains how to use the `sites-available/example-site.com.conf` confi
 
 The best practice site configuration demonstrates a complete setup for hosting a modern website with:
 
-- **Main Website**: Static content with optional backend proxy
-- **API Subdomain**: Dedicated API server with rate limiting and CORS
-- **Admin Subdomain**: Secure admin panel with enhanced security
-- **Comprehensive Security**: Modern headers, CSP, and file protection
-- **Performance Optimization**: HTTP/3, caching, and compression
 
 ## 🏗 Architecture
 
@@ -161,7 +156,6 @@ location /api/ {
 }
 ```
 
-### API Subdomain Features
 
 #### Service-Specific Routing
 ```nginx
@@ -211,12 +205,10 @@ deny all;
 
 ### Adding a Blog Subdomain
 
-1. **Add to HTTP redirect server:**
 ```nginx
 server_name example-site.com www.example-site.com api.example-site.com admin.example-site.com blog.example-site.com;
 ```
 
-2. **Create new server block:**
 ```nginx
 server {
     listen 443 ssl;
@@ -465,7 +457,6 @@ curl -X OPTIONS \
 
 ### Common Issues
 
-1. **SSL Certificate Issues**
    ```bash
    # Check certificate
    openssl x509 -in /etc/letsencrypt/live/yourdomain.com/cert.pem -noout -dates
@@ -474,7 +465,6 @@ curl -X OPTIONS \
    openssl s_client -connect yourdomain.com:443 -servername yourdomain.com
    ```
 
-2. **Backend Connection Issues**
    ```bash
    # Test backend connectivity
    curl -I http://127.0.0.1:3000/health
@@ -483,7 +473,6 @@ curl -X OPTIONS \
    sudo tail -f /var/log/nginx/error.log
    ```
 
-3. **Rate Limiting Too Aggressive**
    ```bash
    # Check rate limit logs
    sudo grep "limiting requests" /var/log/nginx/error.log
@@ -492,7 +481,6 @@ curl -X OPTIONS \
    limit_req zone=api burst=30 nodelay;  # Increase burst
    ```
 
-4. **CORS Issues**
    ```bash
    # Check CORS headers
    curl -H "Origin: https://yourapp.com" -I https://api.yourdomain.com/

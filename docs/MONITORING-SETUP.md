@@ -24,13 +24,6 @@ Reading: 6 Writing: 179 Waiting: 106
 ```
 
 ### **Metrics Explained:**
-- **Active connections**: Current number of active client connections (including Waiting)
-- **accepts**: Total number of accepted client connections
-- **handled**: Total number of handled connections (should equal accepts)
-- **requests**: Total number of client requests
-- **Reading**: Connections where nginx is reading the request header
-- **Writing**: Connections where nginx is writing the response back to the client
-- **Waiting**: Idle client connections waiting for a request (keep-alive)
 
 ## 🔧 **Usage Examples**
 
@@ -217,9 +210,6 @@ load_module modules/ngx_http_stub_status_module.so;
 - Track request rate trends
 
 ### **2. Key Metrics to Watch:**
-- **Active connections** - Should be reasonable for your traffic
-- **Waiting connections** - High numbers may indicate keep-alive issues
-- **Handled vs Accepts** - Should be equal (if not, resource limits hit)
 
 ### **3. Alerting Thresholds:**
 ```bash

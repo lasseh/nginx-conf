@@ -117,7 +117,6 @@ location /auth/ {
 }
 ```
 
-### CORS Configuration
 
 Pre-configured CORS headers for web application access:
 
@@ -146,7 +145,6 @@ location = /50x.json {
 
 ### Adding a New Service
 
-1. **Add upstream definition:**
 ```nginx
 upstream notification_service {
     server 127.0.0.1:8005;
@@ -154,12 +152,10 @@ upstream notification_service {
 }
 ```
 
-2. **Add rate limiting zone:**
 ```nginx
 limit_req_zone $binary_remote_addr zone=notification_api:10m rate=15r/s;
 ```
 
-3. **Add location block:**
 ```nginx
 location /notifications/ {
     limit_req               zone=notification_api burst=25 nodelay;
@@ -274,7 +270,6 @@ location /status/auth {
 
 ## 🔒 Security Considerations
 
-### API Key Authentication
 
 ```nginx
 # Require API key for certain endpoints
@@ -288,7 +283,6 @@ location /admin/ {
 }
 ```
 
-### IP Whitelisting
 
 ```nginx
 # Restrict admin endpoints to specific IPs
@@ -353,21 +347,17 @@ curl -X OPTIONS \
 
 ### Common Issues
 
-1. **502 Bad Gateway**
    - Check if backend services are running
    - Verify upstream server addresses and ports
    - Check firewall rules
 
-2. **Rate Limiting Too Aggressive**
    - Adjust burst values: `burst=20 nodelay`
    - Increase rate limits: `rate=20r/s`
 
-3. **CORS Issues**
    - Verify Origin header handling
    - Check preflight OPTIONS handling
    - Review Access-Control headers
 
-4. **SSL Certificate Issues**
    - Verify certificate paths
    - Check certificate expiry
    - Ensure proper certificate chain
