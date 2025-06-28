@@ -44,7 +44,8 @@ nginx-new/
 │   ├── websocket.conf         # WebSocket proxy configuration
 │   └── stub-status.conf       # Nginx status endpoint
 ├── sites-available/           # Available site configurations
-│   └── api-gateway.example.com.conf  # API Gateway example
+│   ├── api-gateway.example.com.conf  # API Gateway example
+│   └── example-site.com.conf         # Best practice site example
 ├── sites-enabled/             # Virtual host configurations
 │   ├── defaults-80.conf       # Default HTTP server
 │   ├── whynoipv6.com.conf     # Example production site
@@ -54,7 +55,8 @@ nginx-new/
 │   └── ipv6.fail.conf         # Security headers for test site
 ├── docs/                      # Documentation
 │   ├── API-GATEWAY-SETUP.md   # API Gateway configuration guide
-│   └── API-GATEWAY-DIAGRAM.md # Architecture diagrams
+│   ├── API-GATEWAY-DIAGRAM.md # Architecture diagrams
+│   └── BEST-PRACTICE-SITE-SETUP.md # Best practice site guide
 ├── IMPROVEMENTS.md            # Detailed changelog and improvements
 └── README.md                  # This file
 ```
@@ -221,6 +223,44 @@ For microservices architecture, use the included API gateway example:
    ```
 
 **📖 For detailed API gateway setup, see [docs/API-GATEWAY-SETUP.md](docs/API-GATEWAY-SETUP.md)**
+
+### Setting Up a Best Practice Website
+
+For modern website hosting with multiple subdomains:
+
+1. **Copy the best practice configuration:**
+   ```bash
+   sudo cp /etc/nginx/sites-available/example-site.com.conf /etc/nginx/sites-available/yourdomain.com.conf
+   sudo cp /etc/nginx/sites-security/example-site.com.conf /etc/nginx/sites-security/yourdomain.com.conf
+   ```
+
+2. **Update domain names:**
+   ```bash
+   # Replace domain in both files
+   sudo sed -i 's/example-site\.com/yourdomain.com/g' /etc/nginx/sites-available/yourdomain.com.conf
+   sudo sed -i 's/example-site\.com/yourdomain.com/g' /etc/nginx/sites-security/yourdomain.com.conf
+   ```
+
+3. **Configure backend services:**
+   ```nginx
+   upstream backend_app {
+       server 127.0.0.1:3000;    # Your main application
+       keepalive 32;
+   }
+   
+   upstream admin_app {
+       server 127.0.0.1:3100;    # Your admin application
+       keepalive 16;
+   }
+   ```
+
+4. **Enable the site:**
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/yourdomain.com.conf /etc/nginx/sites-enabled/
+   sudo nginx -t && sudo nginx -s reload
+   ```
+
+**📖 For detailed best practice setup, see [docs/BEST-PRACTICE-SITE-SETUP.md](docs/BEST-PRACTICE-SITE-SETUP.md)**
 
 ### Rate Limiting Configuration
 
