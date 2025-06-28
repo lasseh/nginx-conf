@@ -32,11 +32,46 @@ nginx-conf/
 
 ## Installation
 
+### Install Latest Nginx (Recommended)
+
+For HTTP/3 and latest features, install from nginx's official repository:
+
 ```bash
-# Install nginx
+# Ubuntu - Add nginx repository
+curl -fsSL https://nginx.org/keys/nginx_signing.key | sudo gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu $(lsb_release -cs) nginx" | sudo tee /etc/apt/sources.list.d/nginx.list
+sudo apt update && sudo apt install nginx
+
+# Debian - Add nginx repository
+curl -fsSL https://nginx.org/keys/nginx_signing.key | sudo gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/debian $(lsb_release -cs) nginx" | sudo tee /etc/apt/sources.list.d/nginx.list
+sudo apt update && sudo apt install nginx
+
+# CentOS/RHEL - Add nginx repository  
+sudo yum install -y https://nginx.org/packages/centos/$(rpm -E '%{rhel}')/noarch/RPMS/nginx-release-centos-$(rpm -E '%{rhel}')-0.el$(rpm -E '%{rhel}').ngx.noarch.rpm
+sudo yum install nginx
+
+# Or use distribution packages (older versions, but easier)
 sudo apt install nginx  # Ubuntu/Debian
 sudo yum install nginx  # CentOS/RHEL
+```
 
+### Install Brotli Compression (Debian/Ubuntu)
+
+For optimal performance, install Brotli compression modules:
+
+```bash
+# Debian/Ubuntu - Install Brotli modules
+sudo apt install libnginx-mod-http-brotli-filter libnginx-mod-http-brotli-static
+
+# Enable modules in nginx.conf (add before 'http' block)
+echo 'load_module modules/ngx_http_brotli_filter_module.so;' | sudo tee -a /etc/nginx/nginx.conf
+echo 'load_module modules/ngx_http_brotli_static_module.so;' | sudo tee -a /etc/nginx/nginx.conf
+```
+
+### Deploy Configuration
+
+```bash
 # Deploy configuration
 git clone https://github.com/lasseh/nginx-conf.git
 cd nginx-conf
