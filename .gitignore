@@ -1,0 +1,7 @@
+# Ignore all files in sites-enabled except the defaults
+sites-enabled/*
+!sites-enabled/defaults-*.conf
+
+# Keep existing tracked files but ignore new ones
+# Use: git update-index --skip-worktree sites-enabled/filename.conf
+# To track new files manually if needed
