@@ -161,7 +161,7 @@ location /notifications/ {
     limit_req               zone=notification_api burst=25 nodelay;
     rewrite                 ^/notifications/(.*)$ /$1 break;
     proxy_pass              http://notification_service;
-    include                 conf.d/proxy.conf;
+    include                 snippets/proxy-headers.conf;
     proxy_set_header        X-Service "notifications";
 }
 ```
@@ -190,9 +190,9 @@ location /users/profile {
         expires 5m;
         add_header Cache-Control "public, must-revalidate";
     }
-    
+
     proxy_pass http://user_service;
-    include conf.d/proxy.conf;
+    include snippets/proxy-headers.conf;
 }
 ```
 
@@ -203,10 +203,10 @@ location /users/profile {
 location /orders/ {
     # Authenticate request first
     auth_request /auth/verify;
-    
+
     limit_req zone=order_api burst=30 nodelay;
     proxy_pass http://order_service;
-    include conf.d/proxy.conf;
+    include snippets/proxy-headers.conf;
 }
 
 # Internal auth verification endpoint
@@ -277,9 +277,9 @@ location /admin/ {
     if ($http_x_api_key != "your-secret-api-key") {
         return 401 '{"error":"Invalid API key"}';
     }
-    
+
     proxy_pass http://admin_service;
-    include conf.d/proxy.conf;
+    include snippets/proxy-headers.conf;
 }
 ```
 
@@ -290,9 +290,9 @@ location /admin/ {
     allow 192.168.1.0/24;
     allow 10.0.0.0/8;
     deny all;
-    
+
     proxy_pass http://admin_service;
-    include conf.d/proxy.conf;
+    include snippets/proxy-headers.conf;
 }
 ```
 

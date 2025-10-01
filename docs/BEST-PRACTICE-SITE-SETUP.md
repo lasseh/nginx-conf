@@ -152,7 +152,7 @@ location /api/ {
     limit_req zone=general burst=20 nodelay;
     rewrite ^/api/(.*)$ /$1 break;
     proxy_pass http://backend_app;
-    include conf.d/proxy.conf;
+    include snippets/proxy-headers.conf;
 }
 ```
 
@@ -195,10 +195,15 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsaf
 
 #### Optional IP Whitelisting
 ```nginx
-# Restrict admin access to specific IPs
-allow 192.168.1.0/24;    # Local network
-allow YOUR_OFFICE_IP;    # Office IP
-deny all;
+# Restrict admin access to specific IPs (in location / or server block)
+location / {
+    allow 192.168.1.0/24;    # Local network
+    allow YOUR_OFFICE_IP;    # Office IP
+    deny all;
+
+    proxy_pass http://admin_app;
+    include snippets/proxy-headers.conf;
+}
 ```
 
 ## 🔧 Customization Examples
@@ -275,9 +280,9 @@ location @maintenance {
 location / {
     auth_basic "Admin Area";
     auth_basic_user_file /etc/nginx/.htpasswd;
-    
+
     proxy_pass http://admin_app;
-    include conf.d/proxy.conf;
+    include snippets/proxy-headers.conf;
 }
 ```
 

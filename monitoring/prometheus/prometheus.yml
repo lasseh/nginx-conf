@@ -1,0 +1,94 @@
+# =============================================================================
+# PROMETHEUS CONFIGURATION FOR NGINX MONITORING
+# =============================================================================
+# Add this scrape configuration to your existing prometheus.yml
+#
+# Full Prometheus setup:
+#   docker-compose -f docker-compose-full.yml up -d
+#
+# =============================================================================
+
+global:
+  scrape_interval: 15s      # How often to scrape targets
+  evaluation_interval: 15s  # How often to evaluate rules
+
+  external_labels:
+    cluster: 'production'
+    monitor: 'nginx-monitor'
+
+# Scrape configurations
+scrape_configs:
+  # =============================================================================
+  # NGINX PROMETHEUS EXPORTER
+  # =============================================================================
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['localhost:9113']  # nginx-prometheus-exporter
+        labels:
+          env: 'production'
+          instance: 'web-server-01'
+
+    # Scrape interval for this job (override global)
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+    # Relabel to add instance name
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'web-server-01'
+
+  # =============================================================================
+  # MULTIPLE NGINX INSTANCES
+  # =============================================================================
+  # If you have multiple nginx servers, add them here:
+  - job_name: 'nginx-cluster'
+    static_configs:
+      - targets:
+          - 'nginx-01.example.com:9113'
+          - 'nginx-02.example.com:9113'
+          - 'nginx-03.example.com:9113'
+        labels:
+          env: 'production'
+          cluster: 'web-frontend'
+
+  # =============================================================================
+  # NGINX WITH SERVICE DISCOVERY (OPTIONAL)
+  # =============================================================================
+  # For Kubernetes:
+  # - job_name: 'nginx-kubernetes'
+  #   kubernetes_sd_configs:
+  #     - role: pod
+  #   relabel_configs:
+  #     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+  #       action: keep
+  #       regex: true
+  #     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+  #       action: replace
+  #       target_label: __address__
+  #       regex: (.+)
+  #       replacement: $1:9113
+
+  # For Consul:
+  # - job_name: 'nginx-consul'
+  #   consul_sd_configs:
+  #     - server: 'consul.example.com:8500'
+  #       services: ['nginx-exporter']
+
+# =============================================================================
+# ALERTING RULES
+# =============================================================================
+# Create alerts for nginx issues
+# Save as: /etc/prometheus/rules/nginx-alerts.yml
+
+rule_files:
+  - 'alerts/nginx-alerts.yml'
+
+# =============================================================================
+# ALERTMANAGER (OPTIONAL)
+# =============================================================================
+# Configure alertmanager for notifications
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']

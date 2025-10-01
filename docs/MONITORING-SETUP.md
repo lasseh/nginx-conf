@@ -6,7 +6,11 @@ The nginx status monitoring endpoint provides essential server metrics for healt
 
 ## 🏗️ Current Configuration
 
-### **`snippets/stub-status.conf`**
+### Nginx Status Endpoint
+
+The status endpoint is configured directly in default server configuration (`sites-enabled/defaults-443.conf`) or can be added to any site configuration.
+
+**Configuration:**
 - ✅ **Exact location matching** - `location = /nginx-status`
 - ✅ **Modern syntax** - `stub_status` (no arguments needed)
 - ✅ **Security restrictions** - Localhost-only access
@@ -81,7 +85,7 @@ curl http://localhost/nginx-status | nginx-prometheus-exporter
 ## 🔧 **Configuration Options**
 
 ### **Enable Private Network Access:**
-If you need monitoring from other internal servers, uncomment these lines in `stub-status.conf`:
+If you need monitoring from other internal servers, add these lines to your status location:
 
 ```nginx
 allow 10.0.0.0/8;        # Private Class A

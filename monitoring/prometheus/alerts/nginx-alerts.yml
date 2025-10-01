@@ -1,0 +1,183 @@
+# =============================================================================
+# NGINX PROMETHEUS ALERT RULES
+# =============================================================================
+# Common alerts for nginx monitoring
+#
+# Installation:
+#   1. Copy to prometheus rules directory: /etc/prometheus/rules/
+#   2. Add to prometheus.yml: rule_files: - 'rules/nginx-alerts.yml'
+#   3. Reload prometheus: curl -X POST http://localhost:9090/-/reload
+#
+# =============================================================================
+
+groups:
+  - name: nginx_alerts
+    interval: 30s
+    rules:
+      # =========================================================================
+      # AVAILABILITY ALERTS
+      # =========================================================================
+      - alert: NginxDown
+        expr: up{job="nginx"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: nginx
+        annotations:
+          summary: "Nginx is down on {{ $labels.instance }}"
+          description: "Nginx exporter on {{ $labels.instance }} has been down for more than 1 minute."
+          runbook: "Check nginx service: systemctl status nginx"
+
+      # =========================================================================
+      # CONNECTION ALERTS
+      # =========================================================================
+      - alert: NginxHighConnections
+        expr: nginx_connections_active > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: nginx
+        annotations:
+          summary: "High number of active connections on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} has {{ $value }} active connections (threshold: 1000)"
+          runbook: "Check for DDoS attack or traffic spike. Review rate limiting."
+
+      - alert: NginxConnectionsNearLimit
+        expr: nginx_connections_active / on(instance) nginx_connections_accepted * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: nginx
+        annotations:
+          summary: "Nginx connections near worker limit on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} is using {{ $value }}% of available connections"
+          runbook: "Increase worker_connections in nginx.conf"
+
+      # =========================================================================
+      # REQUEST RATE ALERTS
+      # =========================================================================
+      - alert: NginxHighRequestRate
+        expr: rate(nginx_http_requests_total[5m]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: nginx
+        annotations:
+          summary: "High request rate on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} is handling {{ $value }} req/s (threshold: 1000)"
+          runbook: "Check if traffic is legitimate. Consider scaling or rate limiting."
+
+      - alert: NginxRequestRateDrop
+        expr: rate(nginx_http_requests_total[5m]) < 10 and rate(nginx_http_requests_total[1h] offset 1h) > 100
+        for: 10m
+        labels:
+          severity: warning
+          component: nginx
+        annotations:
+          summary: "Request rate dropped significantly on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} request rate dropped from 100+ to {{ $value }} req/s"
+          runbook: "Check if application is down or if there's a DNS/routing issue"
+
+      # =========================================================================
+      # ERROR RATE ALERTS
+      # =========================================================================
+      - alert: NginxHigh4xxRate
+        expr: rate(nginx_http_requests_total{status=~"4.."}[5m]) / rate(nginx_http_requests_total[5m]) * 100 > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: nginx
+        annotations:
+          summary: "High 4xx error rate on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} has {{ $value }}% 4xx errors (threshold: 10%)"
+          runbook: "Check application logs for client errors. Review recent deployments."
+
+      - alert: NginxHigh5xxRate
+        expr: rate(nginx_http_requests_total{status=~"5.."}[5m]) / rate(nginx_http_requests_total[5m]) * 100 > 5
+        for: 2m
+        labels:
+          severity: critical
+          component: nginx
+        annotations:
+          summary: "High 5xx error rate on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} has {{ $value }}% 5xx errors (threshold: 5%)"
+          runbook: "Check backend application health. Review nginx error logs."
+
+      # =========================================================================
+      # PERFORMANCE ALERTS
+      # =========================================================================
+      - alert: NginxHighWaitingConnections
+        expr: nginx_connections_waiting > 500
+        for: 5m
+        labels:
+          severity: warning
+          component: nginx
+        annotations:
+          summary: "High number of waiting connections on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} has {{ $value }} connections waiting (threshold: 500)"
+          runbook: "Check keepalive settings and backend response times"
+
+      - alert: NginxDroppedConnections
+        expr: rate(nginx_connections_accepted[5m]) - rate(nginx_connections_handled[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: nginx
+        annotations:
+          summary: "Nginx is dropping connections on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} is dropping {{ $value }} connections/s"
+          runbook: "Increase worker_connections or worker_processes in nginx.conf"
+
+      # =========================================================================
+      # CAPACITY ALERTS
+      # =========================================================================
+      - alert: NginxHighMemoryUsage
+        expr: process_resident_memory_bytes{job="nginx"} / 1024 / 1024 > 1024
+        for: 10m
+        labels:
+          severity: warning
+          component: nginx
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} is using {{ $value }}MB of memory (threshold: 1GB)"
+          runbook: "Check for memory leaks. Review proxy buffering settings."
+
+      - alert: NginxHighCPUUsage
+        expr: rate(process_cpu_seconds_total{job="nginx"}[5m]) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          component: nginx
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} CPU usage is {{ $value }}% (threshold: 80%)"
+          runbook: "Check for inefficient regex or configuration. Consider scaling."
+
+      # =========================================================================
+      # BACKEND HEALTH ALERTS
+      # =========================================================================
+      - alert: NginxBackendDown
+        expr: nginx_upstream_server_up == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: nginx
+        annotations:
+          summary: "Backend server {{ $labels.server }} is down"
+          description: "Upstream server {{ $labels.server }} in {{ $labels.upstream }} has been down for 2 minutes"
+          runbook: "Check backend service health. Review nginx error logs for connection errors."
+
+      # =========================================================================
+      # SSL CERTIFICATE ALERTS
+      # =========================================================================
+      # Note: Requires nginx-vts-exporter or blackbox-exporter for SSL metrics
+      # - alert: NginxSSLCertificateExpiringSoon
+      #   expr: nginx_ssl_certificate_expiry_seconds < 86400 * 7
+      #   for: 1h
+      #   labels:
+      #     severity: warning
+      #     component: nginx
+      #   annotations:
+      #     summary: "SSL certificate expiring soon on {{ $labels.instance }}"
+      #     description: "SSL certificate for {{ $labels.server_name }} expires in {{ $value | humanizeDuration }}"
+      #     runbook: "Renew SSL certificate with certbot"

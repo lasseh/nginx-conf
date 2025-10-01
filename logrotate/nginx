@@ -1,0 +1,183 @@
+# =============================================================================
+# NGINX LOG ROTATION CONFIGURATION
+# =============================================================================
+# This file manages nginx log file rotation to prevent disk space issues
+# and maintain manageable log file sizes.
+#
+# Installation:
+#   sudo cp logrotate/nginx /etc/logrotate.d/nginx
+#   sudo chmod 644 /etc/logrotate.d/nginx
+#
+# Test configuration:
+#   sudo logrotate -d /etc/logrotate.d/nginx
+#
+# Force rotation (testing):
+#   sudo logrotate -f /etc/logrotate.d/nginx
+#
+# =============================================================================
+
+# Main nginx logs
+/var/log/nginx/*.log {
+    # Rotate daily
+    daily
+
+    # Keep 14 days of logs
+    rotate 14
+
+    # Don't error if log file is missing
+    missingok
+
+    # Don't rotate empty logs
+    notifempty
+
+    # Compress old logs (saves disk space)
+    compress
+
+    # Delay compression until next rotation (allows time for analysis)
+    delaycompress
+
+    # Don't mail logs (disable email notifications)
+    nomail
+
+    # Create new log files with these permissions
+    create 0640 nginx adm
+
+    # Use date as suffix instead of numbers (.log.2025-01-10)
+    dateext
+    dateformat -%Y-%m-%d
+
+    # Share scripts between all log files
+    sharedscripts
+
+    # Actions to perform after rotation
+    postrotate
+        # Test nginx configuration before reload
+        if [ -f /var/run/nginx.pid ]; then
+            # Test configuration
+            /usr/sbin/nginx -t >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                # Send USR1 signal to reopen log files
+                # This is safer than 'systemctl reload' for log rotation
+                kill -USR1 $(cat /var/run/nginx.pid) >/dev/null 2>&1 || true
+            fi
+        fi
+    endscript
+}
+
+# Site-specific logs (if you log per-site)
+/var/log/nginx/sites/*.log {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    nomail
+    create 0640 nginx adm
+    dateext
+    dateformat -%Y-%m-%d
+    sharedscripts
+
+    postrotate
+        if [ -f /var/run/nginx.pid ]; then
+            /usr/sbin/nginx -t >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                kill -USR1 $(cat /var/run/nginx.pid) >/dev/null 2>&1 || true
+            fi
+        fi
+    endscript
+}
+
+# High-volume logs (API gateways, etc.) - rotate more frequently
+/var/log/nginx/api-*.log {
+    # Rotate every hour for high-volume logs
+    hourly
+
+    # Keep 7 days of hourly logs (168 files)
+    rotate 168
+
+    missingok
+    notifempty
+    compress
+    delaycompress
+    nomail
+    create 0640 nginx adm
+    dateext
+    dateformat -%Y-%m-%d-%H
+    sharedscripts
+
+    postrotate
+        if [ -f /var/run/nginx.pid ]; then
+            /usr/sbin/nginx -t >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                kill -USR1 $(cat /var/run/nginx.pid) >/dev/null 2>&1 || true
+            fi
+        fi
+    endscript
+}
+
+# Error logs - keep longer
+/var/log/nginx/error.log {
+    daily
+    rotate 30  # Keep 30 days of error logs
+    missingok
+    notifempty
+    compress
+    delaycompress
+    nomail
+    create 0640 nginx adm
+    dateext
+    dateformat -%Y-%m-%d
+    sharedscripts
+
+    postrotate
+        if [ -f /var/run/nginx.pid ]; then
+            /usr/sbin/nginx -t >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                kill -USR1 $(cat /var/run/nginx.pid) >/dev/null 2>&1 || true
+            fi
+        fi
+    endscript
+}
+
+# =============================================================================
+# CONFIGURATION OPTIONS EXPLAINED
+# =============================================================================
+#
+# Frequency Options:
+#   daily        - Rotate once per day
+#   weekly       - Rotate once per week
+#   monthly      - Rotate once per month
+#   hourly       - Rotate every hour (requires cron.hourly)
+#   size 100M    - Rotate when file reaches size (e.g., 100M, 1G)
+#
+# Retention Options:
+#   rotate 14    - Keep 14 rotated logs (older ones are deleted)
+#   maxage 30    - Remove logs older than 30 days
+#
+# Compression Options:
+#   compress     - Compress old logs with gzip
+#   nocompress   - Don't compress old logs
+#   delaycompress - Wait one rotation cycle before compressing
+#   compresscmd  - Use different compression (e.g., bzip2, xz)
+#
+# File Creation Options:
+#   create 0640 nginx adm  - New file permissions and ownership
+#   nocreate               - Don't create new log file (nginx will)
+#
+# Date Options:
+#   dateext                  - Use date as suffix
+#   dateformat -%Y-%m-%d     - Date format (YYYY-MM-DD)
+#   nodateext                - Use numbers (.1, .2, .3)
+#
+# Notification Options:
+#   mail admin@example.com  - Email rotated logs
+#   nomail                  - Don't email logs
+#
+# Error Handling:
+#   missingok    - Don't error if log file is missing
+#   nomissingok  - Error if log file is missing
+#   notifempty   - Don't rotate empty logs
+#   ifempty      - Rotate even if empty
+#
+# =============================================================================

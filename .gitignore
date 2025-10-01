@@ -1,3 +1,10 @@
+# =============================================================================
+# NGINX CONFIGURATION REPOSITORY - GITIGNORE
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Site Configurations
+# -----------------------------------------------------------------------------
 # Ignore all files in sites-enabled except the defaults
 sites-enabled/*
 !sites-enabled/defaults-*.conf
@@ -5,3 +12,218 @@ sites-enabled/*
 # Keep existing tracked files but ignore new ones
 # Use: git update-index --skip-worktree sites-enabled/filename.conf
 # To track new files manually if needed
+
+# -----------------------------------------------------------------------------
+# SSL Certificates and Private Keys
+# -----------------------------------------------------------------------------
+# NEVER commit SSL certificates or private keys
+*.key
+*.crt
+*.pem
+*.csr
+*.p12
+*.pfx
+
+# Let's Encrypt directories (if stored in repo for some reason)
+letsencrypt/
+ssl/private/
+ssl/certs/
+
+# -----------------------------------------------------------------------------
+# Secrets and Credentials
+# -----------------------------------------------------------------------------
+.env
+.env.*
+*.secret
+*.secrets
+credentials.json
+secrets.yml
+.htpasswd
+password.txt
+auth/*
+
+# -----------------------------------------------------------------------------
+# Logs
+# -----------------------------------------------------------------------------
+*.log
+logs/
+*.log.*
+access.log
+error.log
+
+# Log archives
+*.log.gz
+*.log.1
+*.log.2.gz
+
+# -----------------------------------------------------------------------------
+# Backup Files
+# -----------------------------------------------------------------------------
+*.bak
+*.backup
+*.old
+*.orig
+*~
+*.swp
+*.swo
+*.swn
+
+# Configuration backups
+nginx.conf.bak
+*.conf.bak
+*.conf.old
+
+# Backup directories
+backup/
+backups/
+*.backup/
+
+# -----------------------------------------------------------------------------
+# Operating System Files
+# -----------------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Thumbnails
+Thumbs.db
+ehthumbs.db
+
+# Windows
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# -----------------------------------------------------------------------------
+# Editor and IDE Files
+# -----------------------------------------------------------------------------
+# VSCode
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs (IntelliJ, WebStorm, etc.)
+.idea/
+*.iml
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+Session.vim
+.netrwhist
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+
+# TextMate
+*.tmproj
+*.tmproject
+tmtags
+
+# -----------------------------------------------------------------------------
+# Temporary Files
+# -----------------------------------------------------------------------------
+*.tmp
+*.temp
+.tmp/
+temp/
+tmp/
+
+# PID files
+*.pid
+nginx.pid
+
+# Socket files
+*.sock
+
+# -----------------------------------------------------------------------------
+# Testing and Development
+# -----------------------------------------------------------------------------
+# Test configuration files
+test.conf
+dev.conf
+local.conf
+scratch.conf
+
+# Development databases
+*.db
+*.sqlite
+*.sqlite3
+
+# -----------------------------------------------------------------------------
+# Compression and Archives
+# -----------------------------------------------------------------------------
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# -----------------------------------------------------------------------------
+# Documentation Build Files
+# -----------------------------------------------------------------------------
+docs/_build/
+docs/.doctrees/
+
+# -----------------------------------------------------------------------------
+# Node.js (if using npm for any tooling)
+# -----------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# -----------------------------------------------------------------------------
+# Python (if using Python scripts for automation)
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+.venv
+
+# -----------------------------------------------------------------------------
+# Monitoring and Metrics
+# -----------------------------------------------------------------------------
+# Prometheus data
+prometheus/data/
+
+# Grafana
+grafana/data/
+
+# -----------------------------------------------------------------------------
+# Docker (if using Docker for testing)
+# -----------------------------------------------------------------------------
+.dockerignore
+docker-compose.override.yml
+
+# -----------------------------------------------------------------------------
+# Custom Excludes
+# -----------------------------------------------------------------------------
+# Add your custom patterns here
+# Example: exclude specific test domains
+# sites-available/test-*.conf

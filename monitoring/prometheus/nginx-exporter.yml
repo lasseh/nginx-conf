@@ -1,0 +1,109 @@
+# =============================================================================
+# NGINX PROMETHEUS EXPORTER - DOCKER COMPOSE
+# =============================================================================
+# This exports nginx metrics to Prometheus for monitoring and alerting
+#
+# Installation:
+#   1. Install Docker and Docker Compose
+#   2. cd monitoring/prometheus
+#   3. docker-compose up -d
+#
+# Access:
+#   - Exporter metrics: http://localhost:9113/metrics
+#   - Nginx stub_status: http://localhost/nginx-status (localhost only)
+#
+# =============================================================================
+
+version: '3.8'
+
+services:
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: nginx-prometheus-exporter
+    restart: unless-stopped
+
+    # Command line arguments
+    command:
+      - '-nginx.scrape-uri=http://host.docker.internal/nginx-status'
+      # For custom stub_status location:
+      # - '-nginx.scrape-uri=http://host.docker.internal/custom-status'
+
+      # SSL/TLS options (if stub_status is behind HTTPS):
+      # - '-nginx.ssl-verify=false'
+      # - '-nginx.ssl-ca-cert=/etc/ssl/certs/ca.pem'
+      # - '-nginx.ssl-client-cert=/etc/ssl/certs/client.pem'
+      # - '-nginx.ssl-client-key=/etc/ssl/private/client-key.pem'
+
+      # Timeout for scraping nginx
+      - '-nginx.timeout=5s'
+
+      # Retry configuration
+      - '-nginx.retries=2'
+
+    ports:
+      - "9113:9113"  # Exporter metrics port
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9113/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Resources
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Network mode for accessing host's nginx
+    # Use 'host.docker.internal' in command above
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+# =============================================================================
+# ALTERNATIVE: NATIVE INSTALLATION (WITHOUT DOCKER)
+# =============================================================================
+# If you prefer to run the exporter natively:
+#
+# 1. Download binary:
+#    wget https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v1.1.0/nginx-prometheus-exporter_1.1.0_linux_amd64.tar.gz
+#    tar xzf nginx-prometheus-exporter_1.1.0_linux_amd64.tar.gz
+#    sudo mv nginx-prometheus-exporter /usr/local/bin/
+#
+# 2. Create systemd service:
+#    sudo nano /etc/systemd/system/nginx-exporter.service
+#
+# [Unit]
+# Description=NGINX Prometheus Exporter
+# After=network.target
+#
+# [Service]
+# Type=simple
+# User=nginx-exporter
+# ExecStart=/usr/local/bin/nginx-prometheus-exporter \
+#   -nginx.scrape-uri=http://localhost/nginx-status \
+#   -web.listen-address=:9113
+# Restart=always
+#
+# [Install]
+# WantedBy=multi-user.target
+#
+# 3. Start service:
+#    sudo systemctl daemon-reload
+#    sudo systemctl enable nginx-exporter
+#    sudo systemctl start nginx-exporter
+#
+# =============================================================================
