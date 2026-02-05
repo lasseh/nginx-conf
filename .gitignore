@@ -227,3 +227,5 @@ docker-compose.override.yml
 # Add your custom patterns here
 # Example: exclude specific test domains
 # sites-available/test-*.conf
+
+/CLAUDE.md
