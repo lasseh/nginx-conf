@@ -14,10 +14,16 @@
 # Force rotation (testing):
 #   sudo logrotate -f /etc/logrotate.d/nginx
 #
+# NOTE: The "create" directive uses "nginx adm" (RHEL/CentOS/Alma).
+# On Debian/Ubuntu, change to "www-data adm".
+#
 # =============================================================================
 
-# Main nginx logs
-/var/log/nginx/*.log {
+# Main nginx logs (excludes api-* and error.log — handled separately below)
+/var/log/nginx/access.log
+/var/log/nginx/*.access.log
+/var/log/nginx/*.error.log
+{
     # Rotate daily
     daily
 
@@ -49,22 +55,15 @@
     # Share scripts between all log files
     sharedscripts
 
-    # Actions to perform after rotation
+    # Reopen log files after rotation
     postrotate
-        # Test nginx configuration before reload
         if [ -f /var/run/nginx.pid ]; then
-            # Test configuration
-            /usr/sbin/nginx -t >/dev/null 2>&1
-            if [ $? -eq 0 ]; then
-                # Send USR1 signal to reopen log files
-                # This is safer than 'systemctl reload' for log rotation
-                kill -USR1 $(cat /var/run/nginx.pid) >/dev/null 2>&1 || true
-            fi
+            kill -USR1 $(cat /var/run/nginx.pid) 2>/dev/null || true
         fi
     endscript
 }
 
-# Site-specific logs (if you log per-site)
+# Site-specific logs (if you log per-site to a subdirectory)
 /var/log/nginx/sites/*.log {
     daily
     rotate 14
@@ -80,22 +79,17 @@
 
     postrotate
         if [ -f /var/run/nginx.pid ]; then
-            /usr/sbin/nginx -t >/dev/null 2>&1
-            if [ $? -eq 0 ]; then
-                kill -USR1 $(cat /var/run/nginx.pid) >/dev/null 2>&1 || true
-            fi
+            kill -USR1 $(cat /var/run/nginx.pid) 2>/dev/null || true
         fi
     endscript
 }
 
-# High-volume logs (API gateways, etc.) - rotate more frequently
+# High-volume logs (API gateways, etc.) - rotate by size
+# Rotates when a file exceeds 100M, keeps 14 rotations
 /var/log/nginx/api-*.log {
-    # Rotate every hour for high-volume logs
-    hourly
-
-    # Keep 7 days of hourly logs (168 files)
-    rotate 168
-
+    daily
+    size 100M
+    rotate 14
     missingok
     notifempty
     compress
@@ -103,23 +97,20 @@
     nomail
     create 0640 nginx adm
     dateext
-    dateformat -%Y-%m-%d-%H
+    dateformat -%Y-%m-%d-%s
     sharedscripts
 
     postrotate
         if [ -f /var/run/nginx.pid ]; then
-            /usr/sbin/nginx -t >/dev/null 2>&1
-            if [ $? -eq 0 ]; then
-                kill -USR1 $(cat /var/run/nginx.pid) >/dev/null 2>&1 || true
-            fi
+            kill -USR1 $(cat /var/run/nginx.pid) 2>/dev/null || true
         fi
     endscript
 }
 
-# Error logs - keep longer
+# Error log - keep longer for debugging
 /var/log/nginx/error.log {
     daily
-    rotate 30  # Keep 30 days of error logs
+    rotate 30
     missingok
     notifempty
     compress
@@ -132,10 +123,7 @@
 
     postrotate
         if [ -f /var/run/nginx.pid ]; then
-            /usr/sbin/nginx -t >/dev/null 2>&1
-            if [ $? -eq 0 ]; then
-                kill -USR1 $(cat /var/run/nginx.pid) >/dev/null 2>&1 || true
-            fi
+            kill -USR1 $(cat /var/run/nginx.pid) 2>/dev/null || true
         fi
     endscript
 }
@@ -148,7 +136,6 @@
 #   daily        - Rotate once per day
 #   weekly       - Rotate once per week
 #   monthly      - Rotate once per month
-#   hourly       - Rotate every hour (requires cron.hourly)
 #   size 100M    - Rotate when file reaches size (e.g., 100M, 1G)
 #
 # Retention Options:
@@ -169,10 +156,6 @@
 #   dateext                  - Use date as suffix
 #   dateformat -%Y-%m-%d     - Date format (YYYY-MM-DD)
 #   nodateext                - Use numbers (.1, .2, .3)
-#
-# Notification Options:
-#   mail admin@example.com  - Email rotated logs
-#   nomail                  - Don't email logs
 #
 # Error Handling:
 #   missingok    - Don't error if log file is missing

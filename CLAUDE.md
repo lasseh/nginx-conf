@@ -4,155 +4,129 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-This is a production-ready Nginx configuration repository with modular design for security hardening, performance optimization, and modern HTTP/3 support. It's designed for multi-site hosting with reusable configuration snippets.
+Production-ready, modular nginx configuration for multi-site hosting with security hardening, HTTP/2 and HTTP/3 (QUIC) support, and a two-layer monitoring stack. All configs are templates — replace placeholder domains with actual domains before use.
 
-## Testing and Validation
+## Validation
 
 ```bash
-# Test configuration syntax (run after any changes)
-sudo nginx -t
-
-# Test specific site configuration
-sudo nginx -t -c /etc/nginx/sites-available/example-site.com.conf
-
-# Reload nginx after successful test
-sudo nginx -s reload
+sudo nginx -t                # Test syntax (run after every change)
+sudo nginx -s reload         # Graceful reload (no downtime)
 ```
 
 ## Architecture
 
-The configuration follows a hierarchical include pattern:
-
 ```
-nginx.conf (main)
-├── conf.d/ (global configs loaded by main)
-│   ├── security.conf, performance.conf, tls-intermediate.conf
-│   ├── proxy.conf, websocket.conf, logformat.conf
-│   └── cloudflare.conf, sse.conf
-├── snippets/ (reusable blocks included in sites)
-│   ├── proxy-headers.conf (standard proxy headers)
-│   ├── security-headers.conf, deny-files.conf
-│   ├── gzip.conf, brotli.conf
-│   ├── letsencrypt.conf, rate-limiting.conf
-│   └── php-fpm.conf, static-files.conf, websocket.conf
-├── sites-available/ (site templates)
-├── sites-enabled/ (symlinks to active sites)
-└── sites-security/ (per-site security headers)
+nginx.conf
+├── conf.d/          # HTTP-level globals — loaded once, affects ALL server blocks
+├── snippets/        # Reusable blocks — selectively included in server/location blocks
+├── sites-available/ # Site templates (10 templates, not loaded directly)
+├── sites-enabled/   # Active sites (symlinks → sites-available/, loaded by nginx.conf)
+├── sites-security/  # Per-site security headers (CSP, HSTS overrides)
+├── monitoring/      # Prometheus + Grafana Alloy + dashboard
+└── examples/        # SSE and WebSocket reference configs
 ```
 
-**Key Pattern**: `conf.d/` files are included globally at the http level in nginx.conf. `snippets/` files are manually included in specific site configurations where needed.
+### conf.d/ vs snippets/ (critical distinction)
 
-## Configuration Standards
+**conf.d/** files are included globally at the `http {}` level in nginx.conf. They set defaults for ALL server blocks (proxy timeouts, TLS settings, log formats, variable maps). Never include conf.d/ files in location blocks.
 
-### Site Configuration Pattern
+**snippets/** files are manually included where needed — in `server {}` or `location {}` blocks. They provide reusable directives (proxy headers, security headers, deny rules, gzip, HTTP/3 headers).
 
-When creating new site configurations:
+### Include hierarchy in a typical site config
 
-1. **HTTP to HTTPS redirect** - Always include for port 80
-2. **SSL certificates** - Use Let's Encrypt paths: `/etc/letsencrypt/live/{domain}/`
-3. **HTTP/3 support** - Include QUIC listeners and Alt-Svc header
-4. **Security includes**:
-   - `conf.d/tls-intermediate.conf` (TLS settings)
-   - `sites-security/{domain}.conf` (site-specific headers)
-   - `conf.d/cloudflare.conf` (if behind Cloudflare)
-5. **Proxy configurations** - Use `snippets/proxy-headers.conf` for standard headers
-6. **Rate limiting** - Apply `limit_req zone=api` or `zone=general` as appropriate
-
-### Proxy Header Usage
-
-When proxying to backends, use `include snippets/proxy-headers.conf` instead of manually setting proxy headers. This provides:
-- Host, X-Real-IP, X-Forwarded-For, X-Forwarded-Proto
-- X-Forwarded-Host, X-Request-ID
-
-Add service-specific headers after the include.
-
-### WebSocket Support
-
-For WebSocket endpoints, include both:
-1. Standard proxy headers: `include snippets/proxy-headers.conf`
-2. WebSocket upgrade headers from `conf.d/websocket.conf` pattern:
-   ```nginx
-   proxy_set_header Upgrade $http_upgrade;
-   proxy_set_header Connection $connection_upgrade;
-   ```
-
-### Rate Limiting Zones
-
-Defined in nginx.conf:
-- `zone=api` - 10r/s for API endpoints
-- `zone=general` - 1r/s for general use
-
-Apply with `limit_req zone=api burst=20 nodelay;`
-
-### Upstream Definitions
-
-Place upstream blocks at the end of site configurations:
 ```nginx
-upstream backend_app {
-    server 127.0.0.1:3000;
-    keepalive 32;
+# Server level
+include sites-security/domain.conf;     # Site-specific CSP, HSTS (optional)
+include snippets/security-headers.conf; # Generic security headers
+include snippets/http3.conf;            # Alt-Svc header for HTTP/3
+include snippets/deny-files.conf;       # Block .git, .env, backups
+
+# Location level
+location /api/ {
+    proxy_pass http://backend;
+    include snippets/proxy-headers.conf; # Host, X-Real-IP, X-Forwarded-*
 }
 ```
 
-## Site Deployment Workflow
+### add_header inheritance (nginx gotcha)
 
-1. Create configuration in `sites-available/{domain}.conf`
-2. Create security headers in `sites-security/{domain}.conf` (if needed)
-3. Test configuration: `sudo nginx -t`
-4. Enable site: `sudo ln -s /etc/nginx/sites-available/{domain}.conf /etc/nginx/sites-enabled/`
-5. Reload: `sudo nginx -s reload`
+When a `location` block has ANY `add_header` directive, nginx silently drops ALL parent-level `add_header` directives. This means security headers from the server block are lost.
+
+**Fix:** Add `include snippets/security-headers.conf;` inside every location block that uses its own `add_header`:
+
+```nginx
+location /static/ {
+    include snippets/security-headers.conf;  # Re-include, or security headers are lost
+    add_header Cache-Control "public, immutable";
+}
+```
+
+### sites-security/ files
+
+Per-domain security header customization. Included at server level in site configs. Contains `add_header` directives (HSTS, CSP, COEP, COOP, CORP) and optionally `location` blocks for file/path restrictions. Use these when a site needs a custom CSP or different cross-origin policy than the generic snippet.
+
+### WebSocket pattern
+
+The `$connection_upgrade` variable is defined in `conf.d/maps.conf` (not a separate websocket.conf). WebSocket locations need:
+
+```nginx
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection $connection_upgrade;
+include snippets/proxy-headers.conf;
+proxy_read_timeout 3600s;
+proxy_send_timeout 3600s;
+```
+
+### Monitoring stack
+
+Two layers in `monitoring/`:
+- **Layer 1:** stub_status + nginx-prometheus-exporter (connection counts, request totals)
+- **Layer 2:** Grafana Alloy (tails access logs in `elk_json` format → Prometheus metrics for 4xx/5xx rates, response time histograms, bytes/s → Loki for log search)
+
+The global access log in nginx.conf uses `elk_json` format (defined in `conf.d/logformat.conf`) which Alloy parses. The Grafana dashboard (`monitoring/grafana/nginx-dashboard.json`) has 16 panels covering both layers.
+
+## Site Configuration Pattern
+
+Every HTTPS site config follows this structure:
+
+1. HTTP server on port 80 → `return 301 https://`
+2. HTTPS server on port 443 with `ssl`, `quic`, `http2 on`, `http3 on`
+3. SSL certs from Let's Encrypt: `/etc/letsencrypt/live/{domain}/`
+4. Security includes: `snippets/security-headers.conf`, `snippets/http3.conf`, `snippets/deny-files.conf`
+5. Proxy locations using `include snippets/proxy-headers.conf`
+6. Upstream blocks at end of file with `keepalive 32`
+
+Rate limiting is disabled by default. See `docs/RATE-LIMITING.md` to enable.
 
 ## Code Style
 
-- **Indentation**: 4 spaces
-- **Alignment**: Align directive values using spaces for readability
-- **Comments**: Explain purpose, not syntax
-- **Server blocks**: Separate with blank lines
-- **Include order**: security → performance → general → proxy → TLS
+- 4-space indentation
+- Align directive values with spaces for readability
+- Comments explain "why", not "what"
+- CSP headers must be a single line (HTTP/2 RFC 7540 §8.1.2 forbids line folding)
 
-## Security Requirements
+## Site Deployment
 
-All new configurations must include:
-- HTTPS redirect on port 80
-- Modern TLS settings (via tls-intermediate.conf)
-- Security headers (X-Frame-Options, X-Content-Type-Options, etc.)
-- Rate limiting on user-facing endpoints
-- Deny rules for sensitive files (.git, .env, etc.)
+```bash
+cp sites-available/reverse-proxy.conf sites-available/newsite.com.conf
+# Edit: server_name, ssl paths, upstream
+sudo nginx -t
+sudo ln -s /etc/nginx/sites-available/newsite.com.conf /etc/nginx/sites-enabled/
+sudo nginx -s reload
+```
 
-## Common Tasks
+## Key Files Reference
 
-### Adding a New Site
-
-Use `sites-available/example-site.com.conf` as the template. It demonstrates:
-- Multi-subdomain setup (main, api, admin)
-- Static file caching strategies
-- API proxying with CORS
-- WebSocket support
-- Rate limiting per endpoint
-
-### Adding Proxy Headers
-
-Always use `include snippets/proxy-headers.conf` for standard headers. Only add custom headers for service-specific needs (e.g., `X-Service`, `X-Request-ID`).
-
-### Modifying Global Settings
-
-- **Performance/security**: Edit `conf.d/performance.conf` or `conf.d/security.conf`
-- **Proxy defaults**: Edit `conf.d/proxy.conf`
-- **TLS settings**: Edit `conf.d/tls-intermediate.conf`
-
-Changes to `conf.d/` files affect all sites globally.
-
-## Documentation References
-
-See `docs/` directory for detailed guides:
-- `API-GATEWAY-SETUP.md` - Microservices routing patterns
-- `BEST-PRACTICE-SITE-SETUP.md` - Multi-subdomain site configuration
-- `MONITORING-SETUP.md` - Logging and metrics
-- `SECURITY-CHECKLIST.md` - Security validation
-
-## Notes
-
-- Files in `sites-enabled/` should always be symlinks, never direct files
-- The `.gitignore` excludes all `sites-enabled/*` except defaults
-- `sites-security/` contains site-specific security headers (CSP, HSTS, etc.)
-- Upstream keepalive is set in upstream blocks (typically 32 for backends, 16 for admin)
+| File | Purpose |
+|------|---------|
+| `conf.d/proxy.conf` | Global proxy timeouts (60s), buffering, HTTP/1.1 upstream |
+| `conf.d/maps.conf` | WebSocket upgrade mapping, RFC 7239 forwarded header |
+| `conf.d/tls-intermediate.conf` | TLS 1.2+1.3, Mozilla Intermediate ciphers, OCSP |
+| `conf.d/tls-modern.conf` | TLS 1.3 only (optional, stricter) |
+| `conf.d/security-monitoring.conf` | HTTP-level maps for attack detection (optional) |
+| `snippets/proxy-headers.conf` | Host, X-Real-IP, X-Forwarded-*, X-Request-ID |
+| `snippets/security-headers.conf` | HSTS, X-Frame-Options, COEP/COOP/CORP, Permissions-Policy |
+| `snippets/deny-files.conf` | Blocks .git, .env, backups, config files, VCS dirs |
+| `snippets/error-pages.conf` | HTML error pages (404, 500, 502, 503, 504) from `html/errors/` |
+| `snippets/error-pages-json.conf` | JSON error pages (404, 429, 500, 502-504) for APIs |
+| `snippets/security-monitoring.conf` | Server-level attack pattern location blocks |

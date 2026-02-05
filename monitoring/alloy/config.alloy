@@ -1,0 +1,215 @@
+// =============================================================================
+// GRAFANA ALLOY - NGINX LOG COLLECTION & METRICS
+// =============================================================================
+// Tails nginx access logs, extracts Prometheus metrics (status codes, latency),
+// and ships raw logs to Loki for ad-hoc queries in Grafana.
+//
+// This gives you what stub_status can't: 4xx/5xx rates, per-path metrics,
+// response time histograms, and full log search.
+//
+// Prerequisites:
+//   1. Nginx must use the elk_json log format (defined in conf.d/logformat.conf):
+//        access_log /var/log/nginx/access.log elk_json;
+//   2. Loki must be running (default: localhost:3100)
+//   3. Prometheus scrapes Alloy's metrics endpoint (default: localhost:12345)
+//
+// Installation:
+//   https://grafana.com/docs/alloy/latest/get-started/install/
+//
+// Run:
+//   alloy run config.alloy
+//
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// LOG FILE DISCOVERY
+// -----------------------------------------------------------------------------
+// Find all nginx log files. Alloy watches for new files matching the pattern.
+
+local.file_match "nginx_logs" {
+	path_targets = [
+		{__path__ = "/var/log/nginx/*.log", job = "nginx", instance = constants.hostname},
+	]
+}
+
+// -----------------------------------------------------------------------------
+// TAIL LOG FILES
+// -----------------------------------------------------------------------------
+
+loki.source.file "nginx" {
+	targets    = local.file_match.nginx_logs.targets
+	forward_to = [loki.process.nginx_json.receiver]
+}
+
+// -----------------------------------------------------------------------------
+// PARSE JSON LOGS
+// -----------------------------------------------------------------------------
+// Uses the elk_json format from conf.d/logformat.conf.
+// If your nginx uses the standard combined format instead, see the
+// "COMBINED FORMAT" section at the bottom of this file.
+
+loki.process "nginx_json" {
+	// Parse the JSON log line
+	stage.json {
+		expressions = {
+			status        = "status",
+			method        = "method",
+			uri           = "uri",
+			response_time = "response_time",
+			bytes_sent    = "bytes_sent",
+			remote_addr   = "remote_addr",
+			server_name   = "server_name",
+			upstream_addr = "upstream_addr",
+			user_agent    = "user_agent",
+		}
+	}
+
+	// Map status codes to classes (2xx, 3xx, 4xx, 5xx) to limit cardinality
+	stage.template {
+		source   = "status_class"
+		template = "{{ substr 0 1 .status }}xx"
+	}
+
+	// Add labels for Loki queries and metric extraction
+	stage.labels {
+		values = {
+			method       = "",
+			status       = "",
+			status_class = "",
+			server_name  = "",
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// PROMETHEUS METRICS (scraped from Alloy's /metrics endpoint)
+	// -------------------------------------------------------------------------
+
+	// Total requests by method and status class
+	stage.metrics {
+		metric.counter {
+			name              = "nginx_http_requests_by_status_total"
+			description       = "Total nginx HTTP requests by method and status class"
+			source            = "status_class"
+			action            = "inc"
+			match_all         = true
+		}
+	}
+
+	// Response size in bytes
+	stage.metrics {
+		metric.counter {
+			name              = "nginx_http_response_bytes_total"
+			description       = "Total bytes sent in HTTP responses"
+			source            = "bytes_sent"
+			action            = "add"
+			match_all         = true
+		}
+	}
+
+	// Request duration histogram (seconds)
+	stage.metrics {
+		metric.histogram {
+			name              = "nginx_http_request_duration_seconds"
+			description       = "HTTP request duration in seconds"
+			source            = "response_time"
+			buckets           = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+			match_all         = true
+		}
+	}
+
+	forward_to = [loki.write.default.receiver]
+}
+
+// -----------------------------------------------------------------------------
+// SHIP LOGS TO LOKI
+// -----------------------------------------------------------------------------
+
+loki.write "default" {
+	endpoint {
+		url = "http://localhost:3100/loki/api/v1/push"
+	}
+}
+
+// =============================================================================
+// PROMETHEUS SCRAPE CONFIG
+// =============================================================================
+// Add this to your prometheus.yml to scrape the metrics Alloy extracts:
+//
+//   - job_name: 'alloy'
+//     static_configs:
+//       - targets: ['localhost:12345']
+//
+// Then these PromQL queries work:
+//
+//   # 5xx error rate as percentage
+//   sum(rate(nginx_http_requests_by_status_total{status_class="5xx"}[5m]))
+//   / sum(rate(nginx_http_requests_by_status_total[5m])) * 100
+//
+//   # 4xx error rate as percentage
+//   sum(rate(nginx_http_requests_by_status_total{status_class="4xx"}[5m]))
+//   / sum(rate(nginx_http_requests_by_status_total[5m])) * 100
+//
+//   # Request rate by status class
+//   sum by (status_class) (rate(nginx_http_requests_by_status_total[5m]))
+//
+//   # p95 response time
+//   histogram_quantile(0.95, sum(rate(nginx_http_request_duration_seconds_bucket[5m])) by (le))
+//
+//   # Bytes/sec sent
+//   sum(rate(nginx_http_response_bytes_total[5m]))
+//
+// =============================================================================
+// LOKI QUERIES (LogQL) in Grafana
+// =============================================================================
+// With raw logs in Loki, you can run ad-hoc queries:
+//
+//   # All 5xx errors
+//   {job="nginx"} | json | status_class = "5xx"
+//
+//   # Slow requests (>1s)
+//   {job="nginx"} | json | response_time > 1
+//
+//   # 404s for a specific path prefix
+//   {job="nginx"} | json | status = "404" | uri =~ "/api/.*"
+//
+//   # Requests from a specific IP
+//   {job="nginx"} | json | remote_addr = "192.168.1.100"
+//
+//   # Error rate over time (for Grafana graph panel)
+//   sum by (status_class) (count_over_time({job="nginx"} | json | status_class =~ "4xx|5xx" [5m]))
+
+// =============================================================================
+// ALTERNATIVE: COMBINED LOG FORMAT (non-JSON)
+// =============================================================================
+// If your nginx uses the standard combined format instead of elk_json,
+// replace loki.process "nginx_json" with this block:
+//
+// loki.process "nginx_combined" {
+//     stage.regex {
+//         expression = `^(?P<remote_addr>\S+) - (?P<remote_user>\S+) \[(?P<time_local>[^\]]+)\] "(?P<method>\S+) (?P<uri>\S+) (?P<protocol>\S+)" (?P<status>\d{3}) (?P<bytes_sent>\d+) "(?P<http_referer>[^"]*)" "(?P<http_user_agent>[^"]*)"$`
+//     }
+//
+//     stage.template {
+//         source   = "status_class"
+//         template = "{{ substr 0 1 .status }}xx"
+//     }
+//
+//     stage.labels {
+//         values = {
+//             method       = "",
+//             status       = "",
+//             status_class = "",
+//         }
+//     }
+//
+//     stage.metrics {
+//         metric.counter {
+//             name      = "nginx_http_requests_by_status_total"
+//             source    = "status_class"
+//             action    = "inc"
+//             match_all = true
+//         }
+//     }
+//
+//     forward_to = [loki.write.default.receiver]
+// }

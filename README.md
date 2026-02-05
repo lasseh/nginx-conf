@@ -11,7 +11,7 @@ Production-ready, modular nginx configuration for secure and performant web host
 - **Secure Defaults** - Server tokens off, deny dangerous files, HTTPS-only
 
 ### Performance Optimized
-- **HTTP/2** - Multiplexed connections for faster load times
+- **HTTP/2 & HTTP/3** - Multiplexed connections and QUIC for faster load times
 - **Gzip Compression** - Optimized static asset delivery
 - **Connection Pooling** - Keepalive and upstream connection optimization
 - **Smart Caching** - Configurable cache strategies for static and dynamic content
@@ -19,7 +19,7 @@ Production-ready, modular nginx configuration for secure and performant web host
 ### Modular Architecture
 - **Reusable Snippets** - DRY configuration with include files
 - **Separation of Concerns** - Global configs, site configs, security headers
-- **Template Library** - 11 production-ready site templates
+- **Template Library** - 10 production-ready site templates
 - **Easy Customization** - Clear documentation and examples
 
 ## 📁 Directory Structure
@@ -29,22 +29,32 @@ Production-ready, modular nginx configuration for secure and performant web host
 ├── nginx.conf                  # Main configuration file
 │
 ├── conf.d/                     # Global HTTP-level configurations
+│   ├── cloudflare.conf         # Cloudflare IP ranges (optional)
+│   ├── fastcgi_params          # FastCGI parameter defaults
 │   ├── logformat.conf          # Custom log formats
-│   ├── maps.conf               # WebSocket upgrade mapping
+│   ├── maps.conf               # Variable mappings (WebSocket upgrade, etc.)
 │   ├── mime.types              # MIME type definitions
 │   ├── performance.conf        # Performance tuning
 │   ├── proxy.conf              # Proxy timeout and buffering defaults
 │   ├── security.conf           # Global security settings
-│   └── tls-intermediate.conf   # SSL/TLS configuration
+│   ├── security-monitoring.conf # Security monitoring maps/formats (optional)
+│   ├── tls-intermediate.conf   # SSL/TLS configuration (TLS 1.2+)
+│   └── tls-modern.conf         # TLS 1.3-only configuration (optional)
 │
 ├── snippets/                   # Reusable configuration blocks
+│   ├── common-locations.conf   # Shared location blocks (favicon, robots.txt)
 │   ├── deny-files.conf         # Block access to sensitive files
-│   ├── error-pages.conf        # Custom error pages (502, 503, 504)
+│   ├── error-pages.conf        # HTML error pages (404, 500, 502, 503, 504)
+│   ├── error-pages-json.conf   # JSON error pages for APIs
 │   ├── gzip.conf               # Compression settings
+│   ├── http3.conf              # HTTP/3 and QUIC headers
 │   ├── letsencrypt.conf        # ACME challenge support
+│   ├── method-filter.conf      # Restrict allowed HTTP methods
+│   ├── php-fpm.conf            # PHP-FPM FastCGI processing
 │   ├── proxy-headers.conf      # Standard proxy headers
 │   ├── rate-limiting.conf      # Rate limit configurations
 │   ├── security-headers.conf   # Common security headers
+│   ├── security-monitoring.conf # Attack pattern detection (server-level)
 │   ├── static-files.conf       # Static asset caching
 │   └── stub-status.conf        # Nginx status endpoint
 │
@@ -58,8 +68,7 @@ Production-ready, modular nginx configuration for secure and performant web host
 │   ├── load-balancer.conf              # Multi-server load balancing
 │   ├── netbox.example.com.conf         # NetBox IPAM
 │   ├── reverse-proxy.conf              # Simple reverse proxy
-│   ├── static-site.conf                # Static HTML/SPA
-│   └── wordpress.conf                  # WordPress with PHP-FPM
+│   └── static-site.conf                # Static HTML/SPA
 │
 ├── sites-enabled/              # Active site configurations (symlinks)
 │   ├── defaults-80.conf        # HTTP default server (HTTPS redirect)
@@ -69,10 +78,18 @@ Production-ready, modular nginx configuration for secure and performant web host
 │   ├── example-site.com.conf
 │   └── whynoipv6.com.conf
 │
-├── html/errors/                # Custom error pages
-│   ├── 502.html                # Bad Gateway (backend down)
-│   ├── 503.html                # Service Unavailable (maintenance)
-│   └── 504.html                # Gateway Timeout (backend slow)
+├── html/errors/                # Custom error pages (HTML + JSON)
+│   ├── 404.html / 404.json    # Not Found
+│   ├── 429.json               # Too Many Requests (API only)
+│   ├── 500.html / 500.json    # Internal Server Error
+│   ├── 502.html / 502.json    # Bad Gateway (backend down)
+│   ├── 503.html / 503.json    # Service Unavailable (maintenance)
+│   └── 504.html / 504.json    # Gateway Timeout (backend slow)
+│
+├── monitoring/                  # Monitoring stack configuration
+│   ├── alloy/                  # Grafana Alloy (log-derived metrics)
+│   ├── grafana/                # Grafana dashboard
+│   └── prometheus/             # Prometheus scrape config and alerts
 │
 └── examples/                   # Reference configurations
     ├── sse-example.conf        # Server-Sent Events
@@ -141,14 +158,18 @@ sudo nginx -t && sudo nginx -s reload
 ## 📚 Documentation
 
 ### Core Guides
-- **[Sites Available Guide](docs/SITES-AVAILABLE-GUIDE.md)** - Complete reference for all 11 site templates
+- **[Sites Available Guide](docs/SITES-AVAILABLE-GUIDE.md)** - Complete reference for all site templates
 - **[Security Checklist](docs/SECURITY-CHECKLIST.md)** - Security hardening guide
+- **[Performance Tuning](docs/PERFORMANCE-TUNING.md)** - Performance optimization guide
+- **[Rate Limiting](docs/RATE-LIMITING.md)** - Comprehensive rate limiting configuration
 
 ### Specific Use Cases
 - **[API Gateway Setup](docs/API-GATEWAY-SETUP.md)** - Microservices routing configuration
 - **[API Gateway Diagram](docs/API-GATEWAY-DIAGRAM.md)** - Architecture visualization
 - **[Best Practice Site Setup](docs/BEST-PRACTICE-SITE-SETUP.md)** - Multi-subdomain configuration
+- **[HTTP/3 Implementation](docs/HTTP3-IMPLEMENTATION.md)** - QUIC and HTTP/3 setup
 - **[Monitoring Setup](docs/MONITORING-SETUP.md)** - Logging and health checks
+- **[Improvements Review](docs/IMPROVEMENTS-REVIEW.md)** - Code review and modernization notes
 
 ## 🎯 Common Use Cases
 
@@ -170,12 +191,6 @@ sudo cp sites-available/api-gateway.example.com.conf sites-available/api.yoursit
 # Configure service routing, enable site, reload nginx
 ```
 
-### WordPress Site
-```bash
-sudo cp sites-available/wordpress.conf sites-available/yoursite.com.conf
-# Update database and PHP-FPM settings, enable site, reload nginx
-```
-
 ### Docker Compose Services
 ```bash
 sudo cp sites-available/docker-compose.conf sites-available/yoursite.com.conf
@@ -193,6 +208,20 @@ sudo cp sites-available/docker-compose.conf sites-available/yoursite.com.conf
 - ✅ Dangerous file blocking (.git, .env, .htaccess)
 - ✅ Default servers catch invalid requests
 
+### DH Parameters Setup
+
+Generate strong Diffie-Hellman parameters for enhanced TLS security:
+
+```bash
+# Generate 4096-bit DH parameters (takes several minutes)
+sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 4096
+
+# Verify the file was created
+sudo ls -lh /etc/ssl/certs/dhparam.pem
+```
+
+This file is referenced in `conf.d/tls-intermediate.conf` and is required for DHE cipher suites. The generation process can take 5-10 minutes depending on your system.
+
 ### Optional Enhancements
 - IP whitelisting for admin areas
 - Basic authentication
@@ -203,7 +232,7 @@ sudo cp sites-available/docker-compose.conf sites-available/yoursite.com.conf
 ## ⚡ Performance Features
 
 ### Optimizations Included
-- ✅ HTTP/2 enabled
+- ✅ HTTP/2 and HTTP/3 (QUIC) enabled
 - ✅ Gzip compression
 - ✅ Static file caching with immutable headers
 - ✅ Connection keepalive and pooling
@@ -279,6 +308,30 @@ location /api/ {
 }
 ```
 
+### Custom Error Pages
+
+Two error page snippets are provided in `html/errors/`:
+
+**HTML error pages** (user-facing sites):
+```nginx
+server {
+    ...
+    include snippets/error-pages.conf;
+}
+```
+Covers: 404, 500, 502, 503, 504 with styled HTML pages.
+
+**JSON error pages** (APIs):
+```nginx
+server {
+    ...
+    include snippets/error-pages-json.conf;
+}
+```
+Covers: 404, 429, 500, 502, 503, 504 with JSON responses.
+
+Alternatively, API configs can use inline responses for dynamic fields like timestamps — see `sites-available/api-gateway.example.com.conf` for examples.
+
 ## 📊 Monitoring
 
 ### Health Checks
@@ -303,10 +356,14 @@ sudo grep -E "error|warn" /var/log/nginx/error.log
 ```
 
 ### Integration
-- Prometheus + nginx-prometheus-exporter
-- Grafana dashboards
-- ELK stack (Elasticsearch, Logstash, Kibana)
-- Custom monitoring scripts
+
+See `monitoring/` directory for a ready-to-use stack:
+- Prometheus + nginx-prometheus-exporter (connection metrics)
+- Grafana Alloy (log-derived metrics: status codes, latency histograms)
+- Grafana dashboards (16-panel dashboard included)
+- Loki log search (via Alloy)
+
+See [Monitoring Setup](docs/MONITORING-SETUP.md) for details.
 
 ## 🐛 Troubleshooting
 

@@ -26,31 +26,34 @@ scrape_configs:
       - targets: ['localhost:9113']  # nginx-prometheus-exporter
         labels:
           env: 'production'
-          instance: 'web-server-01'
 
     # Scrape interval for this job (override global)
     scrape_interval: 10s
     scrape_timeout: 5s
 
-    # Relabel to add instance name
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'web-server-01'
-
   # =============================================================================
-  # MULTIPLE NGINX INSTANCES
+  # GRAFANA ALLOY (log-derived metrics: status codes, latency, bytes)
   # =============================================================================
-  # If you have multiple nginx servers, add them here:
-  - job_name: 'nginx-cluster'
+  # Alloy tails nginx access logs and exposes metrics at :12345/metrics
+  # See monitoring/alloy/config.alloy for setup
+  - job_name: 'alloy'
     static_configs:
-      - targets:
-          - 'nginx-01.example.com:9113'
-          - 'nginx-02.example.com:9113'
-          - 'nginx-03.example.com:9113'
+      - targets: ['localhost:12345']
         labels:
           env: 'production'
-          cluster: 'web-frontend'
+
+  # =============================================================================
+  # MULTIPLE NGINX INSTANCES (uncomment and customize)
+  # =============================================================================
+  # - job_name: 'nginx-cluster'
+  #   static_configs:
+  #     - targets:
+  #         - 'nginx-01.example.com:9113'
+  #         - 'nginx-02.example.com:9113'
+  #         - 'nginx-03.example.com:9113'
+  #       labels:
+  #         env: 'production'
+  #         cluster: 'web-frontend'
 
   # =============================================================================
   # NGINX WITH SERVICE DISCOVERY (OPTIONAL)

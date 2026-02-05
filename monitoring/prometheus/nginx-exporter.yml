@@ -14,8 +14,6 @@
 #
 # =============================================================================
 
-version: '3.8'
-
 services:
   nginx-exporter:
     image: nginx/nginx-prometheus-exporter:latest
