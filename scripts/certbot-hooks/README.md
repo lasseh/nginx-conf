@@ -6,6 +6,73 @@ Automatically reload nginx after SSL certificate renewal.
 
 When certbot renews your SSL certificates, nginx needs to be reloaded to use the new certificates. This hook automates that process.
 
+## First-Time Certificate Setup
+
+If this is a fresh server with no Let's Encrypt certificates yet, follow these steps before installing the deploy hook.
+
+### 1. Install Certbot
+
+```bash
+# Debian/Ubuntu
+sudo apt update && sudo apt install certbot
+
+# RHEL/Rocky/Alma
+sudo dnf install certbot
+```
+
+### 2. Create the ACME Webroot Directory
+
+The `snippets/letsencrypt.conf` snippet serves challenges from this path:
+
+```bash
+sudo mkdir -p /usr/share/nginx/html/letsencrypt/.well-known/acme-challenge
+```
+
+### 3. Enable the Site Config (HTTP Only)
+
+Each site template includes `snippets/letsencrypt.conf` in its port 80 server block, which handles ACME challenges. Copy your site config and enable it:
+
+```bash
+# Copy a template and edit it
+sudo cp sites-available/reverse-proxy.conf sites-available/your-app.com.conf
+# Edit: server_name, upstream, etc.
+
+# Enable the site
+sudo ln -s /etc/nginx/sites-available/your-app.com.conf /etc/nginx/sites-enabled/
+sudo nginx -t && sudo nginx -s reload
+```
+
+Nginx will serve HTTP on port 80 and handle ACME challenges. The HTTPS server block will fail to load until certificates exist — this is expected and nginx will still start.
+
+### 4. Point DNS to Your Server
+
+Create an A record (and AAAA for IPv6) pointing your domain to the server's IP. Wait for DNS propagation before requesting a certificate.
+
+### 5. Request the Certificate
+
+```bash
+sudo certbot certonly --webroot \
+    -w /usr/share/nginx/html/letsencrypt \
+    -d your-app.com \
+    -d www.your-app.com
+```
+
+Certbot places certificates in `/etc/letsencrypt/live/your-app.com/`.
+
+### 6. Reload Nginx
+
+Now that certificates exist, the HTTPS server block will load:
+
+```bash
+sudo nginx -t && sudo nginx -s reload
+```
+
+Verify with `curl -I https://your-app.com`.
+
+### 7. Install the Deploy Hook
+
+Continue with the installation section below to automate reloads on renewal.
+
 ## Installation
 
 ### 1. Copy Hook Script
