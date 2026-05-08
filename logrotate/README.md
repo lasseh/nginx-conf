@@ -8,7 +8,7 @@ Logrotate automatically:
 - Rotates logs daily (access logs) or as configured
 - Compresses old logs to save disk space
 - Keeps logs for a specified retention period
-- Signals nginx to reopen log files after rotation
+- Uses copytruncate so nginx keeps writing to the same file descriptor
 - Deletes old logs automatically
 
 ## Installation
@@ -191,27 +191,15 @@ Checks:
 - Is the log file big enough (if using size-based)?
 - Does the log file exist and is not empty?
 
-### 3. Perform Rotation
+### 3. Perform Rotation (copytruncate)
 
-1. **Rename** `access.log` → `access.log-2025-01-10`
-2. **Create** new empty `access.log` (with correct permissions)
-3. **Signal nginx** to reopen log files (USR1 signal)
+1. **Copy** `access.log` → `access.log-2025-01-10`
+2. **Truncate** the original `access.log` in place (nginx keeps its file descriptor)
+3. **Signal nginx** (USR1, safety measure — not strictly required with copytruncate)
 4. **Compress** old logs (if enabled and not first rotation)
 5. **Delete** logs older than retention period
 
-### 4. Signal Handling
-
-```bash
-# Logrotate sends USR1 signal to nginx
-kill -USR1 $(cat /var/run/nginx.pid)
-
-# This tells nginx to:
-# - Close current log file handles
-# - Open new log files
-# - Continue logging without downtime
-```
-
-No downtime, no dropped log entries!
+No ownership issues — the original file keeps its permissions and owner. Works on any distro regardless of whether nginx runs as `nginx` or `www-data`.
 
 ## Monitoring
 
@@ -302,9 +290,13 @@ sudo chmod 755 /var/log/nginx
 
 **Error: "error: error creating output file"**
 
-Fix nginx user/group:
+Fix log directory ownership (use whichever user nginx runs as):
 ```bash
+# RHEL/CentOS/Alma
 sudo chown -R nginx:adm /var/log/nginx
+
+# Debian/Ubuntu
+sudo chown -R www-data:adm /var/log/nginx
 ```
 
 ### Nginx Not Reopening Logs
@@ -411,7 +403,7 @@ endscript
     nocompress    # Don't compress (easier to read)
     missingok
     notifempty
-    create 0640 nginx adm
+    copytruncate
 }
 ```
 

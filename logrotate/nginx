@@ -14,15 +14,13 @@
 # Force rotation (testing):
 #   sudo logrotate -f /etc/logrotate.d/nginx
 #
-# NOTE: The "create" directive uses "nginx adm" (RHEL/CentOS/Alma).
-# On Debian/Ubuntu, change to "www-data adm".
-#
 # =============================================================================
 
 # Main nginx logs (excludes api-* and error.log — handled separately below)
 /var/log/nginx/access.log
 /var/log/nginx/*.access.log
 /var/log/nginx/*.error.log
+/var/log/nginx/security.log
 {
     # Rotate daily
     daily
@@ -45,8 +43,8 @@
     # Don't mail logs (disable email notifications)
     nomail
 
-    # Create new log files with these permissions
-    create 0640 nginx adm
+    # Copy-then-truncate: nginx keeps writing to the same fd, no ownership issues
+    copytruncate
 
     # Use date as suffix instead of numbers (.log.2025-01-10)
     dateext
@@ -72,7 +70,7 @@
     compress
     delaycompress
     nomail
-    create 0640 nginx adm
+    copytruncate
     dateext
     dateformat -%Y-%m-%d
     sharedscripts
@@ -95,7 +93,7 @@
     compress
     delaycompress
     nomail
-    create 0640 nginx adm
+    copytruncate
     dateext
     dateformat -%Y-%m-%d-%s
     sharedscripts
@@ -116,7 +114,7 @@
     compress
     delaycompress
     nomail
-    create 0640 nginx adm
+    copytruncate
     dateext
     dateformat -%Y-%m-%d
     sharedscripts
@@ -148,9 +146,10 @@
 #   delaycompress - Wait one rotation cycle before compressing
 #   compresscmd  - Use different compression (e.g., bzip2, xz)
 #
-# File Creation Options:
-#   create 0640 nginx adm  - New file permissions and ownership
-#   nocreate               - Don't create new log file (nginx will)
+# File Handling Options:
+#   copytruncate           - Copy log then truncate original (no fd reopen needed)
+#   create 0640 user grp   - Create new file with permissions and ownership
+#   nocreate               - Don't create new log file
 #
 # Date Options:
 #   dateext                  - Use date as suffix
