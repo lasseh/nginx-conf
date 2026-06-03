@@ -71,8 +71,10 @@ Production-ready, modular nginx configuration for secure and performant web host
 │   └── static-site.conf                # Static HTML/SPA
 │
 ├── sites-enabled/              # Active site configurations (symlinks)
-│   ├── defaults-80.conf        # HTTP default server (HTTPS redirect)
-│   └── defaults-443.conf       # HTTPS default server (close invalid requests)
+│   └── defaults-80.conf        # HTTP default server (HTTPS redirect)
+│                               # Note: defaults-443.conf ships in sites-available/
+│                               # as an optional template (needs a default cert);
+│                               # symlink it into sites-enabled/ to activate.
 │
 ├── sites-security/             # Per-site security headers (CSP, etc)
 │   ├── example-site.com.conf
@@ -360,7 +362,7 @@ sudo grep -E "error|warn" /var/log/nginx/error.log
 See `monitoring/` directory for a ready-to-use stack:
 - Prometheus + nginx-prometheus-exporter (connection metrics)
 - Grafana Alloy (log-derived metrics: status codes, latency histograms)
-- Grafana dashboards (16-panel dashboard included)
+- Grafana dashboards (23-panel dashboard included)
 - Loki log search (via Alloy)
 
 See [Monitoring Setup](docs/MONITORING-SETUP.md) for details.

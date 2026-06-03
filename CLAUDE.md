@@ -83,7 +83,7 @@ Two layers in `monitoring/`:
 - **Layer 1:** stub_status + nginx-prometheus-exporter (connection counts, request totals)
 - **Layer 2:** Grafana Alloy (tails access logs in `elk_json` format → Prometheus metrics for 4xx/5xx rates, response time histograms, bytes/s → Loki for log search)
 
-The global access log in nginx.conf uses `elk_json` format (defined in `conf.d/logformat.conf`) which Alloy parses. The Grafana dashboard (`monitoring/grafana/nginx-dashboard.json`) has 16 panels covering both layers.
+The global access log in nginx.conf uses `elk_json` format (defined in `conf.d/logformat.conf`) which Alloy parses. The Grafana dashboard (`monitoring/grafana/nginx-dashboard.json`) has 23 panels (18 visualizations across 5 row sections) covering both layers.
 
 ## Site Configuration Pattern
 
