@@ -70,11 +70,13 @@ Production-ready, modular nginx configuration for secure and performant web host
 │   ├── reverse-proxy.conf              # Simple reverse proxy
 │   └── static-site.conf                # Static HTML/SPA
 │
-├── sites-enabled/              # Active site configurations (symlinks)
-│   └── defaults-80.conf        # HTTP default server (HTTPS redirect)
-│                               # Note: defaults-443.conf ships in sites-available/
-│                               # as an optional template (needs a default cert);
-│                               # symlink it into sites-enabled/ to activate.
+├── sites-enabled/              # Active site configurations — empty in this repo,
+│                               # populated by whatever deploys it. Nothing here
+│                               # is tracked, so a deployer that owns this
+│                               # directory does not fight the next clone.
+│                               # defaults-80.conf and defaults-443.conf both ship
+│                               # in sites-available/ as templates; symlink or copy
+│                               # the one you want. defaults-443 needs a default cert.
 │
 ├── sites-security/             # Per-site security headers (CSP, etc)
 │   ├── example-site.com.conf

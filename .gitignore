@@ -5,13 +5,16 @@
 # -----------------------------------------------------------------------------
 # Site Configurations
 # -----------------------------------------------------------------------------
-# Ignore all files in sites-enabled except the defaults
+# sites-enabled/ is populated by whatever deploys this repo, not tracked here.
+# Shipping an active default server means two owners for the directory: a
+# deployer that manages sites-enabled/ deletes the tracked file, the next clone
+# restores it, and the cycle repeats every run. Templates live in
+# sites-available/ — symlink or copy the one you want.
+# .gitkeep keeps the directory itself present in a fresh clone. nginx tolerates a
+# wildcard include over a missing directory, but nginx.conf:94 references
+# sites-enabled/ and you should not have to mkdir it before adding a site.
 sites-enabled/*
-!sites-enabled/defaults-*.conf
-
-# Keep existing tracked files but ignore new ones
-# Use: git update-index --skip-worktree sites-enabled/filename.conf
-# To track new files manually if needed
+!sites-enabled/.gitkeep
 
 # -----------------------------------------------------------------------------
 # SSL Certificates and Private Keys
