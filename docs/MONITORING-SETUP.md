@@ -8,10 +8,10 @@ The nginx status monitoring endpoint provides essential server metrics for healt
 
 ### Nginx Status Endpoint
 
-The status endpoint is configured directly in default server configuration (`sites-enabled/defaults-443.conf`) or can be added to any site configuration.
+The status endpoint lives in `snippets/stub-status.conf`, included by the default server (`sites-available/defaults-80.conf`), and can be added to any site configuration.
 
 **Configuration:**
-- ✅ **Exact location matching** - `location = /nginx-status`
+- ✅ **Two URL spellings** - `location ~ ^/nginx[-_]status$` answers `/nginx-status` and `/nginx_status`, since monitoring tools differ on which they expect
 - ✅ **Modern syntax** - `stub_status` (no arguments needed)
 - ✅ **Security restrictions** - Localhost-only access
 - ✅ **Performance optimization** - Access logging disabled

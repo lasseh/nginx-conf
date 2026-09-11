@@ -130,7 +130,7 @@ curl http://localhost/nginx-status
 If not working, add to your nginx configuration:
 
 ```nginx
-location = /nginx-status {
+location ~ ^/nginx[-_]status$ {
     stub_status;
     allow 127.0.0.1;
     allow ::1;
@@ -506,7 +506,7 @@ Best practices:
 
 🔒 **Restrict stub_status:**
 ```nginx
-location = /nginx-status {
+location ~ ^/nginx[-_]status$ {
     stub_status;
     allow 127.0.0.1;
     allow ::1;
