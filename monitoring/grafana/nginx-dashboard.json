@@ -17,7 +17,20 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": ["nginx"],
+      "asDropdown": false,
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false,
+      "title": "",
+      "tooltip": "",
+      "url": "",
+      "icon": "external link"
+    }
+  ],
   "panels": [
     {
       "collapsed": false,
