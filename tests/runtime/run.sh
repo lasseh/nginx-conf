@@ -95,6 +95,10 @@ check "404 body is not the JSON error page" grep -q '"error"' "$BODY"
 # Nested cache locations must still proxy (they used to serve from disk).
 req api.example.com /users/a.json;           status 200; proxied; secure; has Cache-Control max-age=300
 req api.example.com /analytics/reports/x;    status 200; proxied; secure; has Cache-Control max-age=900
+# sites-security files carry headers only: JSON API routes and manifests are
+# not caught by a stray `\.json$` deny.
+req api.example-site.com /users/1.json;      status 200; proxied; secure
+req example-site.com /manifest.json;         status 200; secure; has Content-Security-Policy
 # Admin assets go to admin_app, not a static-files regex location.
 req admin.example-site.com /app.js;          status 200; proxied; secure
 

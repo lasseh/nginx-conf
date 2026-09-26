@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **BREAKING**: requires nginx >= 1.29.3 (mainline). `conf.d/headers.conf` sets `add_header_inherit merge`, so server-level headers (security headers, CSP, Alt-Svc, CORS) reach every location and `if` block. Distro stable packages fail `nginx -t`.
+- **BREAKING**: `snippets/proxy-headers.conf` now sets `Upgrade`/`Connection`. Non-WebSocket requests send no Connection header, so upstream `keepalive` works. Every proxied location accepts WebSocket handshakes; other Upgrade values (h2c) are dropped.
+- Port-80 redirects go to `https://$host` (was `$server_name`, which sent every subdomain to the first name) via `snippets/redirect-to-https.conf`; HTTPS servers use `snippets/listen-https.conf`.
+- Cache headers use `Cache-Control: max-age=...` instead of `expires` (no `Expires` header, no duplicate Cache-Control).
+- api-gateway 5xx responses come from `html/errors/*.json` with the real 502/503/504 status (was 500 for all, with a timestamp).
+- `sites-security/` files hold headers only. The `\.json$` and admin-path denies in `example-site.com.conf` are gone (they returned 403 for JSON API routes and `/manifest.json`); `snippets/deny-files.conf` covers config files. The admin subdomain has its own `sites-security/admin.example-site.com.conf`.
+- Monitoring: Alloy metrics now come out under the names the dashboard and alerts query; the exporter compose file uses host networking and current flags.
+
+### Migrating existing vhosts
+With `merge`, these patterns in your own vhosts now send duplicate headers. Remove them:
+- `include snippets/security-headers.conf;` (or `http3.conf`) inside a `location` or `if`: `grep -rn 'security-headers\|http3.conf' sites-enabled/`
+- a header set at both server and location level
+- `expires` together with `add_header Cache-Control`
+- `add_header Content-Type` (use `default_type`)
+- after `include snippets/proxy-headers.conf`: `proxy_set_header Upgrade`, `Connection`, `X-Request-ID`, `Host`, `X-Forwarded-*`, and `proxy_http_version 1.1`: `grep -rn 'proxy_set_header *\(Upgrade\|Connection\|X-Request-ID\)' sites-enabled/`
+- `access_log` without a format (falls back to combined and bypasses the Alloy metrics): add `elk_json`
+
+### Added
+- `make test` / `make lint`: `scripts/validate.sh` (`nginx -t` on every template, snippet and nginx.conf) and `tests/runtime/` (all templates enabled together in Docker, asserting response headers, upstream-received headers, exporter and Alloy metrics).
+
 ## [2.0.0] - 2025-01-10
 
 ### Changed

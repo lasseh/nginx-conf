@@ -72,7 +72,7 @@ location /static/ {
 
 ### sites-security/ files
 
-Per-domain security header customization. Included at server level in site configs. Contains `add_header` directives (HSTS, CSP, COEP, COOP, CORP) and optionally `location` blocks for file/path restrictions. Use these when a site needs a custom CSP or different cross-origin policy than the generic snippet.
+Per-domain security header customization. Included at server level in site configs. Contains only `add_header` directives (HSTS, CSP, COEP, COOP, CORP) — a full header set used *instead of* `snippets/security-headers.conf`. No `location` blocks: a regex deny here leaks into every server that includes the file (it used to 403 every `*.json` API route). Use these when a site needs a custom CSP or different cross-origin policy than the generic snippet.
 
 ### WebSocket pattern
 
