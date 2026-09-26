@@ -1,5 +1,6 @@
 # Runtime test rig: every site template enabled together behind one echo
-# upstream. Driven by `make test-runtime`; see tests/runtime/run.sh.
+# upstream, plus the monitoring stack from monitoring/ reading nginx's real
+# output. Driven by `make test-runtime`; see tests/runtime/run.sh.
 name: nginx-conf-runtime
 
 services:
@@ -15,7 +16,28 @@ services:
     entrypoint: ["bash", "-c", "bash /src/tests/runtime/stage.sh && exec nginx -g 'daemon off;'"]
     volumes:
       - ../..:/src:ro
+      - logs:/var/log/nginx
     healthcheck:
       test: ["CMD", "test", "-s", "/var/run/nginx.pid"]
       interval: 1s
       retries: 60
+
+  # Layer 1: same flags as monitoring/prometheus/nginx-exporter.yml. Sharing
+  # nginx's network namespace stands in for that file's network_mode: host.
+  exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    network_mode: service:nginx
+    depends_on:
+      nginx: {condition: service_healthy}
+    command: ["--nginx.scrape-uri=http://127.0.0.1/nginx-status", "--nginx.timeout=5s"]
+
+  # Layer 2: the shipped Alloy config, tailing nginx's log directory.
+  alloy:
+    image: grafana/alloy:latest
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/tmp/alloy", "/etc/alloy/config.alloy"]
+    volumes:
+      - ../../monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - logs:/var/log/nginx:ro
+
+volumes:
+  logs:

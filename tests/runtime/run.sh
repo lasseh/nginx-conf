@@ -139,5 +139,34 @@ done
 req your-app.com / -H 'Upgrade: h2c' -H 'Connection: Upgrade'
                                              up_lacks Upgrade; up_lacks Connection upgrade
 
+# --- monitoring: exporter and Alloy see this traffic (C3) --------------------
+# Layer 1: the exporter (monitoring/prometheus/nginx-exporter.yml flags) can
+# read stub_status on 127.0.0.1.
+CURRENT="exporter http://127.0.0.1:9113/metrics"
+curl -s http://127.0.0.1:9113/metrics > "$BODY"
+check "nginx_up is not 1" grep -q '^nginx_up 1' "$BODY"
+
+# Layer 2: Alloy turns every site's access log into the metric names the
+# dashboard and alerts query. Logs are buffered (flush=5s), so poll.
+req librenms.example.com /    # its only other request (/health) isn't logged
+CURRENT="alloy http://alloy:12345/metrics"
+sites=(your-app.com your-static-site.com example-site.com api.example-site.com admin.example-site.com
+       grafana.example.com netbox.example.com librenms.example.com api.example.com
+       your-load-balanced-app.com your-docker-app.com dev.local)
+for _ in $(seq 60); do
+    curl -s http://alloy:12345/metrics > "$BODY"
+    missing=0
+    for s in "${sites[@]}"; do grep -q "^nginx_http_requests_by_status_total{.*server_name=\"$s\"" "$BODY" || missing=1; done
+    [ "$missing" -eq 0 ] && break
+    sleep 1
+done
+for s in "${sites[@]}"; do
+    check "no request metric for server_name=$s" grep -q "^nginx_http_requests_by_status_total{.*server_name=\"$s\"" "$BODY"
+done
+check "no duration histogram"  grep -q '^nginx_http_request_duration_seconds_bucket{' "$BODY"
+check "no bytes counter"       grep -q '^nginx_http_response_bytes_total{' "$BODY"
+# Only access logs may feed the counters; an error-log line has no status.
+check "non-access-log lines counted (status_class=\"xx\")" absent 'status_class="xx"' "$BODY"
+
 echo "Summary: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

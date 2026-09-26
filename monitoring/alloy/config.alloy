@@ -24,11 +24,13 @@
 // -----------------------------------------------------------------------------
 // LOG FILE DISCOVERY
 // -----------------------------------------------------------------------------
-// Find all nginx log files. Alloy watches for new files matching the pattern.
+// Find nginx ACCESS logs (the global access.log plus per-site
+// <site>.access.log / dev-access.log files). Error logs and security.log are
+// not elk_json; tailing them would feed unparseable lines into the metrics.
 
 local.file_match "nginx_logs" {
 	path_targets = [
-		{__path__ = "/var/log/nginx/*.log", job = "nginx", instance = constants.hostname},
+		{__path__ = "/var/log/nginx/*access*.log", job = "nginx", instance = constants.hostname},
 	]
 }
 
@@ -83,11 +85,19 @@ loki.process "nginx_json" {
 	// -------------------------------------------------------------------------
 	// PROMETHEUS METRICS (scraped from Alloy's /metrics endpoint)
 	// -------------------------------------------------------------------------
+	// Exported name = prefix + name. Alloy's default prefix is
+	// "loki_process_custom_" and an empty prefix counts as unset, so the
+	// "nginx_" part of each name lives in `prefix`. The results are the exact
+	// names monitoring/grafana/nginx-dashboard.json and the alerts query:
+	//   nginx_http_requests_by_status_total
+	//   nginx_http_response_bytes_total
+	//   nginx_http_request_duration_seconds (_bucket/_sum/_count)
 
 	// Total requests by method and status class
 	stage.metrics {
 		metric.counter {
-			name              = "nginx_http_requests_by_status_total"
+			name              = "http_requests_by_status_total"
+			prefix            = "nginx_"
 			description       = "Total nginx HTTP requests by method and status class"
 			source            = "status_class"
 			action            = "inc"
@@ -98,22 +108,22 @@ loki.process "nginx_json" {
 	// Response size in bytes
 	stage.metrics {
 		metric.counter {
-			name              = "nginx_http_response_bytes_total"
+			name              = "http_response_bytes_total"
+			prefix            = "nginx_"
 			description       = "Total bytes sent in HTTP responses"
 			source            = "bytes_sent"
 			action            = "add"
-			match_all         = true
 		}
 	}
 
 	// Request duration histogram (seconds)
 	stage.metrics {
 		metric.histogram {
-			name              = "nginx_http_request_duration_seconds"
+			name              = "http_request_duration_seconds"
+			prefix            = "nginx_"
 			description       = "HTTP request duration in seconds"
 			source            = "response_time"
 			buckets           = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
-			match_all         = true
 		}
 	}
 
@@ -204,7 +214,8 @@ loki.write "default" {
 //
 //     stage.metrics {
 //         metric.counter {
-//             name      = "nginx_http_requests_by_status_total"
+//             name      = "http_requests_by_status_total"
+//             prefix    = "nginx_"
 //             source    = "status_class"
 //             action    = "inc"
 //             match_all = true

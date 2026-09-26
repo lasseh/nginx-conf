@@ -20,34 +20,29 @@ services:
     container_name: nginx-prometheus-exporter
     restart: unless-stopped
 
-    # Command line arguments
+    # Host networking: the exporter reaches stub_status on 127.0.0.1, which is
+    # the only address snippets/stub-status.conf allows. From a bridge network
+    # the request would come from the Docker gateway IP and get a 403.
+    # The exporter listens on the host's :9113 directly (no ports: mapping).
+    network_mode: host
+
+    # Command line arguments (exporter v1+ uses --double-dash flags)
     command:
-      - '-nginx.scrape-uri=http://host.docker.internal/nginx-status'
+      - '--nginx.scrape-uri=http://127.0.0.1/nginx-status'
       # For custom stub_status location:
-      # - '-nginx.scrape-uri=http://host.docker.internal/custom-status'
+      # - '--nginx.scrape-uri=http://127.0.0.1/custom-status'
 
       # SSL/TLS options (if stub_status is behind HTTPS):
-      # - '-nginx.ssl-verify=false'
-      # - '-nginx.ssl-ca-cert=/etc/ssl/certs/ca.pem'
-      # - '-nginx.ssl-client-cert=/etc/ssl/certs/client.pem'
-      # - '-nginx.ssl-client-key=/etc/ssl/private/client-key.pem'
+      # - '--no-nginx.ssl-verify'
+      # - '--nginx.ssl-ca-cert=/etc/ssl/certs/ca.pem'
+      # - '--nginx.ssl-client-cert=/etc/ssl/certs/client.pem'
+      # - '--nginx.ssl-client-key=/etc/ssl/private/client-key.pem'
 
       # Timeout for scraping nginx
-      - '-nginx.timeout=5s'
+      - '--nginx.timeout=5s'
 
-      # Retry configuration
-      - '-nginx.retries=2'
-
-    ports:
-      - "9113:9113"  # Exporter metrics port
-
-    # Health check
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9113/metrics"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    # No healthcheck: the image has no shell or wget. Prometheus' `up` for
+    # job="nginx" and the exporter's own nginx_up metric cover it.
 
     # Resources
     deploy:
@@ -66,19 +61,15 @@ services:
         max-size: "10m"
         max-file: "3"
 
-    # Network mode for accessing host's nginx
-    # Use 'host.docker.internal' in command above
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
 # =============================================================================
 # ALTERNATIVE: NATIVE INSTALLATION (WITHOUT DOCKER)
 # =============================================================================
 # If you prefer to run the exporter natively:
 #
 # 1. Download binary:
-#    wget https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v1.1.0/nginx-prometheus-exporter_1.1.0_linux_amd64.tar.gz
-#    tar xzf nginx-prometheus-exporter_1.1.0_linux_amd64.tar.gz
+#    Get the latest linux tarball from
+#    https://github.com/nginx/nginx-prometheus-exporter/releases/latest
+#    tar xzf nginx-prometheus-exporter_*_linux_amd64.tar.gz
 #    sudo mv nginx-prometheus-exporter /usr/local/bin/
 #
 # 2. Create systemd service:
@@ -92,8 +83,8 @@ services:
 # Type=simple
 # User=nginx-exporter
 # ExecStart=/usr/local/bin/nginx-prometheus-exporter \
-#   -nginx.scrape-uri=http://localhost/nginx-status \
-#   -web.listen-address=:9113
+#   --nginx.scrape-uri=http://127.0.0.1/nginx-status \
+#   --web.listen-address=:9113
 # Restart=always
 #
 # [Install]

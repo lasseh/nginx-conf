@@ -11,8 +11,8 @@ validate:
 
 ## test-runtime: all templates enabled together in nginx:mainline, curl assertions
 test-runtime:
-	@$(COMPOSE) up -d --wait --force-recreate || { $(COMPOSE) logs nginx; $(COMPOSE) down; exit 1; }
-	@$(COMPOSE) exec -T nginx bash /src/tests/runtime/run.sh; rc=$$?; $(COMPOSE) down; exit $$rc
+	@$(COMPOSE) up -d --wait --force-recreate || { $(COMPOSE) logs nginx; $(COMPOSE) down -v; exit 1; }
+	@$(COMPOSE) exec -T nginx bash /src/tests/runtime/run.sh; rc=$$?; $(COMPOSE) down -v; exit $$rc
 
 ## lint: shellcheck the scripts
 lint:

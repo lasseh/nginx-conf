@@ -106,7 +106,9 @@ server {
 }
 ```
 
-Alloy watches `/var/log/nginx/*.log` by default (configured in `monitoring/alloy/config.alloy`), so any `.log` file in that directory will be picked up automatically.
+Alloy watches `/var/log/nginx/*access*.log` (configured in `monitoring/alloy/config.alloy`), so the global `access.log` and any `<site>.access.log` are picked up automatically. Error logs are deliberately excluded: they aren't JSON.
+
+> **Every** `access_log` line needs `elk_json`. A per-site `access_log` without a format uses `combined`, and it replaces the global elk_json log for that server, so the site silently drops out of the Layer 2 metrics.
 
 > **Note:** `error_log` does not support custom formats — it always uses nginx's built-in format. Only `access_log` needs to be changed.
 
@@ -144,22 +146,26 @@ location ~ ^/nginx[-_]status$ {
 
 ```bash
 cd monitoring/prometheus
-docker-compose -f nginx-exporter.yml up -d
+docker compose -f nginx-exporter.yml up -d
 
 # Verify it's running
 curl http://localhost:9113/metrics
 ```
 
+The compose file uses `network_mode: host` so the exporter scrapes stub_status
+from 127.0.0.1, the only address `snippets/stub-status.conf` allows. On a
+Docker bridge network the scrape would come from the gateway IP and get a 403.
+
 **Option B: Native Binary**
 
 ```bash
 # Download and install
-wget https://github.com/nginxinc/nginx-prometheus-exporter/releases/latest/download/nginx-prometheus-exporter-linux-amd64.tar.gz
-tar xzf nginx-prometheus-exporter-linux-amd64.tar.gz
+# Latest linux tarball: https://github.com/nginx/nginx-prometheus-exporter/releases/latest
+tar xzf nginx-prometheus-exporter_*_linux_amd64.tar.gz
 sudo mv nginx-prometheus-exporter /usr/local/bin/
 
 # Run exporter
-nginx-prometheus-exporter -nginx.scrape-uri=http://localhost/nginx-status
+nginx-prometheus-exporter --nginx.scrape-uri=http://127.0.0.1/nginx-status
 ```
 
 ### 3. Configure Prometheus
@@ -208,8 +214,9 @@ sudo apt install grafana-alloy
 # RHEL/CentOS
 sudo yum install grafana-alloy
 
-# Or via Docker
-docker run -v ./monitoring/alloy:/etc/alloy grafana/alloy:latest run /etc/alloy/config.alloy
+# Or via Docker (mount the log directory; listen on 0.0.0.0 so Prometheus can scrape it)
+docker run -v ./monitoring/alloy:/etc/alloy:ro -v /var/log/nginx:/var/log/nginx:ro -p 12345:12345 \
+  grafana/alloy:latest run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
 ```
 
 See https://grafana.com/docs/alloy/latest/get-started/install/ for all options.
@@ -359,10 +366,10 @@ receivers:
 
 ### Included Dashboard
 
-`monitoring/grafana/nginx-dashboard.json` provides a comprehensive 16-panel dashboard:
+`monitoring/grafana/nginx-dashboard.json` provides 18 panels in 5 row sections:
 
 **Sections:**
-- **Overview** - Nginx status, request rate, error rate, active connections, p95 latency, bytes/s, uptime, dropped connections
+- **Overview** - Nginx status, active connections, request rate, 5xx and 4xx error rate, p95 latency, dropped connections, bandwidth
 - **Traffic & Errors** - Request rate with status breakdown, error rate percentage, 4xx/5xx rates
 - **Response Times** - Percentile latencies (p50/p95/p99) and response time heatmap
 - **Connections** - Connection states and acceptance/handled rates
@@ -523,9 +530,9 @@ sudo ufw allow from PROMETHEUS_IP to any port 9113
 🔒 **Use HTTPS for remote monitoring:**
 ```bash
 nginx-prometheus-exporter \
-  -nginx.scrape-uri=https://nginx.example.com/nginx-status \
-  -nginx.ssl-verify=true \
-  -nginx.ssl-ca-cert=/path/to/ca.crt
+  --nginx.scrape-uri=https://nginx.example.com/nginx-status \
+  --nginx.ssl-verify \
+  --nginx.ssl-ca-cert=/path/to/ca.crt
 ```
 
 ## Related Documentation

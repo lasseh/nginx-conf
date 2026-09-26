@@ -16,6 +16,8 @@ rm -rf "${ETC:?}"/*
 cp -R "$SRC"/nginx.conf "$SRC"/conf.d "$SRC"/snippets "$SRC"/sites-available \
       "$SRC"/sites-security "$SRC"/html "$SRC"/modules-enabled "$ETC"/
 mkdir -p "$ETC"/sites-enabled /var/log/nginx /usr/share/nginx/html/letsencrypt
+# The image symlinks access/error logs to stdout/stderr; Alloy needs real files.
+rm -f /var/log/nginx/*.log
 
 for site in "$ETC"/sites-available/*.conf; do
     ln -s "../sites-available/$(basename "$site")" "$ETC/sites-enabled/"
