@@ -76,15 +76,15 @@ Per-domain security header customization. Included at server level in site confi
 
 ### WebSocket pattern
 
-The `$connection_upgrade` variable is defined in `conf.d/maps.conf` (not a separate websocket.conf). WebSocket locations need:
+`snippets/proxy-headers.conf` forwards `Upgrade`/`Connection` from the `$proxy_upgrade`/`$connection_upgrade` maps in `conf.d/maps.conf`: `websocket` handshakes are passed through, every other request gets an empty Connection (so upstream `keepalive` actually reuses connections), and other Upgrade values such as h2c are dropped. Every proxied location therefore accepts WebSocket; a dedicated one only adds timeouts:
 
 ```nginx
-proxy_set_header Upgrade $http_upgrade;
-proxy_set_header Connection $connection_upgrade;
 include snippets/proxy-headers.conf;
 proxy_read_timeout 3600s;
 proxy_send_timeout 3600s;
 ```
+
+Never repeat a header from proxy-headers.conf in the location (`X-Request-ID`, `Connection ""`, `Upgrade`, ...) — nginx forwards both copies. `proxy_http_version 1.1` is already set in `conf.d/proxy.conf`.
 
 ### Monitoring stack
 

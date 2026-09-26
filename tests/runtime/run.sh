@@ -110,5 +110,34 @@ done
 req netbox.example.com /health;              status 200; secure; has Content-Type application/json
 req librenms.example.com /health;            status 200; secure; has Content-Type application/json
 
+# --- what upstreams receive (C2) --------------------------------------------
+# Every proxied location: one of each forwarded header, and no
+# `Connection: close` (which would defeat the upstream keepalive pool).
+upstream_ok() { proxied; up_no_dupes; up_has X-Request-ID; up_has X-Forwarded-Host; up_lacks Connection close; }
+for t in your-app.com:/ your-docker-app.com:/ your-docker-app.com:/api/x your-docker-app.com:/ws/x \
+         db.your-docker-app.com:/ redis.your-docker-app.com:/ monitoring.your-docker-app.com:/ queue.your-docker-app.com:/ \
+         grafana.example.com:/ grafana.example.com:/api/x grafana.example.com:/api/live/x grafana.example.com:/write \
+         grafana.example.com:/public/x netbox.example.com:/ \
+         api.example.com:/auth/x api.example.com:/users/1 api.example.com:/ws/x api.example.com:/v1/x \
+         example-site.com:/api/x api.example-site.com:/auth/x api.example-site.com:/upload/x api.example-site.com:/ws/x \
+         api.example-site.com:/ admin.example-site.com:/ admin.example-site.com:/api/x \
+         your-load-balanced-app.com:/ your-load-balanced-app.com:/api/x your-load-balanced-app.com:/static/x \
+         your-load-balanced-app.com:/ws/x; do
+    req "${t%%:*}" "${t#*:}"; upstream_ok
+done
+for t in dev.local:/ dev.local:/ws/x dev.local:/vite-hmr dev.local:/storybook/ dev.local:/docs/ dev.local:/dev-tools/ \
+         api.dev.local:/ storybook.dev.local:/ docs.dev.local:/; do
+    req80 "${t%%:*}" "${t#*:}"; upstream_ok
+done
+
+# WebSocket handshakes are forwarded from any proxied location...
+ws=(-H 'Upgrade: websocket' -H 'Connection: Upgrade')
+for t in grafana.example.com:/api/live/x api.example.com:/ws/x your-app.com:/ example-site.com:/api/x; do
+    req "${t%%:*}" "${t#*:}" "${ws[@]}"; up_has Upgrade websocket; up_has Connection upgrade; up_no_dupes
+done
+# ...but no other protocol upgrade (h2c smuggling).
+req your-app.com / -H 'Upgrade: h2c' -H 'Connection: Upgrade'
+                                             up_lacks Upgrade; up_lacks Connection upgrade
+
 echo "Summary: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
