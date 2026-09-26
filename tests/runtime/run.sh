@@ -41,7 +41,7 @@ absent() { ! grep -qiE "$1" "$2"; }
 dupes() { cut -d: -f1 | tr '[:upper:]' '[:lower:]' | grep -v '^$' | sort | uniq -d | tr '\n' ' '; }
 
 status()   { check "status $(head -1 "$HDRS" | cut -d' ' -f2), want $1" grep -q "^HTTP/[0-9.]* $1" "$HDRS"; }
-has()      { check "missing response header $1${2:+ ~ $2}" grep -qiE "^$1: .*${2:-}" "$HDRS"; }
+has()      { check "missing response header $1${2:+ ~ $2}" grep -qiE "^$1:.*${2:-}" "$HDRS"; }
 lacks()    { check "unexpected response header $1" absent "^$1:" "$HDRS"; }
 no_dupes() { local d; d=$(sed 1d "$HDRS" | dupes); check "duplicate response headers: $d" test -z "$d"; }
 
@@ -109,6 +109,22 @@ for p in / /login /public/x /avatar/x /style.css /health; do
 done
 req netbox.example.com /health;              status 200; secure; has Content-Type application/json
 req librenms.example.com /health;            status 200; secure; has Content-Type application/json
+
+# --- shared site skeleton (C5) -----------------------------------------------
+# Port 80 redirects to the host the client asked for (was always the first
+# server_name), keeping path and query.
+for h in your-app.com www.your-app.com your-static-site.com www.example-site.com api.example-site.com \
+         admin.example-site.com grafana.example.com netbox.example.com librenms.example.com api.example.com \
+         foo.your-load-balanced-app.com foo.your-docker-app.com; do
+    req80 "$h" '/p?q=1';                     status 301; has Location " https://$h/p\\?q=1$"
+done
+# Every HTTPS server blocks dotfiles and VCS metadata.
+for h in your-app.com your-static-site.com example-site.com api.example-site.com admin.example-site.com \
+         grafana.example.com netbox.example.com librenms.example.com api.example.com \
+         your-load-balanced-app.com admin.your-load-balanced-app.com your-docker-app.com db.your-docker-app.com; do
+    req "$h" /.git/config;                   status 403
+    req "$h" /.env;                          status 403
+done
 
 # --- what upstreams receive (C2) --------------------------------------------
 # Every proxied location: one of each forwarded header, and no

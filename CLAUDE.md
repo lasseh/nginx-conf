@@ -98,12 +98,13 @@ The global access log in nginx.conf uses `elk_json` format (defined in `conf.d/l
 
 Every HTTPS site config follows this structure:
 
-1. HTTP server on port 80 → `return 301 https://`
-2. HTTPS server on port 443 with `ssl`, `quic`, `http2 on`, `http3 on`
+1. Port-80 server: `server_name` + `include snippets/redirect-to-https.conf;` (ACME + 301 to `https://$host`)
+2. HTTPS server: `include snippets/listen-https.conf;` (443 ssl/quic, IPv4+6, http2, http3, Alt-Svc) — never `reuseport`, that lives only on `defaults-443.conf`
 3. SSL certs from Let's Encrypt: `/etc/letsencrypt/live/{domain}/`
-4. Security includes: `snippets/security-headers.conf`, `snippets/http3.conf`, `snippets/deny-files.conf`
-5. Proxy locations using `include snippets/proxy-headers.conf`
-6. Upstream blocks at end of file with `keepalive 32`
+4. Headers: `snippets/security-headers.conf` **or** a `sites-security/{domain}.conf`, plus `snippets/deny-files.conf`
+5. Proxy locations using `include snippets/proxy-headers.conf` (and nothing it already sets)
+6. Per-site `access_log` lines must say `elk_json`, or the site drops out of the Alloy metrics
+7. Upstream blocks with `keepalive 32`. Upstream names are global across enabled sites — prefix them per site
 
 Rate limiting is disabled by default. See `docs/RATE-LIMITING.md` to enable.
 
