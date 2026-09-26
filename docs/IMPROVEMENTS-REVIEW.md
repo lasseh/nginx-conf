@@ -72,7 +72,7 @@ All bugs and issues below have been fixed.
 
 ### Header Inheritance
 
-nginx discards ALL parent `add_header` directives when a child location block uses its own `add_header`. Any location block that sets cache headers or CORS headers must also re-include `snippets/security-headers.conf` to retain security headers. This is by design in nginx — not a bug.
+By default nginx discards ALL parent `add_header` directives when a child location block uses its own `add_header`. `conf.d/headers.conf` sets `add_header_inherit merge` (nginx >= 1.29.3) at http level, so locations and `if` blocks append to the server's headers instead. Do not re-include `snippets/security-headers.conf` inside a location: with merge, every header would be sent twice.
 
 ### Proxy Header Pattern
 

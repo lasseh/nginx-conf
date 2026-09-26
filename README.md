@@ -104,16 +104,12 @@ Production-ready, modular nginx configuration for secure and performant web host
 
 ### 1. Installation
 
-**Ubuntu/Debian:**
-```bash
-sudo apt update
-sudo apt install nginx
-```
-
-**CentOS/RHEL:**
-```bash
-sudo yum install nginx
-```
+**Requires nginx >= 1.29.3 (mainline).** `conf.d/headers.conf` sets
+`add_header_inherit merge`, so server-level security headers reach every
+location. Distro packages (Debian/Ubuntu/RHEL) ship older stable builds and
+fail `nginx -t` with `unknown directive "add_header_inherit"`. Install the
+mainline package from the official nginx.org repository instead:
+https://nginx.org/en/linux_packages.html#mainline
 
 ### 2. Deploy Configuration
 
@@ -257,6 +253,17 @@ This file is referenced in `conf.d/tls-intermediate.conf` and is required for DH
 # Test nginx configuration
 sudo nginx -t
 ```
+
+### Repository Tests
+```bash
+make validate       # nginx -t on every template in isolation (local nginx)
+make test-runtime   # all templates enabled together in Docker, curl assertions
+make test           # both
+make lint           # shellcheck
+```
+`make test-runtime` checks behaviour `nginx -t` cannot see: which headers each
+location returns (security headers, CSP, Alt-Svc, CORS on preflights, no
+duplicates) and which headers each upstream receives.
 
 ### Site Functionality
 ```bash

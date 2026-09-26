@@ -41,13 +41,13 @@ absent() { ! grep -qiE "$1" "$2"; }
 dupes() { cut -d: -f1 | tr '[:upper:]' '[:lower:]' | grep -v '^$' | sort | uniq -d | tr '\n' ' '; }
 
 status()   { check "status $(head -1 "$HDRS" | cut -d' ' -f2), want $1" grep -q "^HTTP/[0-9.]* $1" "$HDRS"; }
-has()      { check "missing response header $1${2:+ ~ $2}" grep -qiE "^$1: ${2:-.*}" "$HDRS"; }
+has()      { check "missing response header $1${2:+ ~ $2}" grep -qiE "^$1: .*${2:-}" "$HDRS"; }
 lacks()    { check "unexpected response header $1" absent "^$1:" "$HDRS"; }
 no_dupes() { local d; d=$(sed 1d "$HDRS" | dupes); check "duplicate response headers: $d" test -z "$d"; }
 
 # Upstream (echo body) assertions: what nginx forwarded to the backend.
 proxied()     { check "request did not reach the upstream" grep -qi '^host:' "$BODY"; }
-up_has()      { check "upstream did not receive $1${2:+ ~ $2}" grep -qiE "^$1: ${2:-.*}" "$BODY"; }
+up_has()      { check "upstream did not receive $1${2:+ ~ $2}" grep -qiE "^$1: .*${2:-}" "$BODY"; }
 up_lacks()    { check "upstream received $1${2:+ ~ $2}" absent "^$1: ${2:-.*}" "$BODY"; }
 up_no_dupes() { local d; d=$(dupes < "$BODY"); check "duplicate upstream headers: $d" test -z "$d"; }
 
@@ -62,6 +62,53 @@ req your-docker-app.com /api/x;              status 200; proxied
 req grafana.example.com /;                   status 200; proxied
 req netbox.example.com /;                    status 200; proxied
 req api.example.com /orders/1;               status 200; proxied
+
+# --- response headers survive locations that add their own (C1) ------------
+# Static site: every location sets Cache-Control, which used to drop Alt-Svc.
+req your-static-site.com /;                  status 200; secure; has Cache-Control
+req your-static-site.com /style.css;         status 200; secure; has Cache-Control immutable
+
+# sites-security CSP/COEP must reach cached assets and HTML, not just the server block.
+for p in / /index.html /robots.txt /favicon.ico /style.css; do
+    req example-site.com "$p";               secure; has Content-Security-Policy; has Cross-Origin-Embedder-Policy credentialless
+done
+req example-site.com /health;                status 200; secure; has Content-Type application/json
+req example-site.com /api/x -X OPTIONS -H 'Origin: https://a.test'
+                                             status 204; secure; has Access-Control-Allow-Origin https://a.test; has Access-Control-Max-Age
+
+# api./admin. subdomains: one value per header, even where they override the site policy.
+req api.example-site.com /health;            status 200; secure; has Content-Type application/json
+req api.example-site.com /x -X OPTIONS -H 'Origin: https://a.test'
+                                             status 204; secure; has Access-Control-Allow-Origin https://a.test
+req admin.example-site.com /;                status 200; secure; has X-Frame-Options DENY; has Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline';"
+
+# api-gateway: server-level CORS on every route, including preflights and errors.
+req api.example.com /payments/x -H 'Origin: https://a.test'
+                                             status 200; secure; has Access-Control-Allow-Origin https://a.test
+req api.example.com /users/1 -X OPTIONS -H 'Origin: https://a.test'
+                                             status 204; secure; has Access-Control-Allow-Origin https://a.test
+req api.example.com /health;                 status 200; secure; has Content-Type application/json; has X-API-Gateway
+req api.example.com /nope;                   status 404; secure; has Content-Type application/json
+# Nested cache locations must still proxy (they used to serve from disk).
+req api.example.com /users/a.json;           status 200; proxied; secure; has Cache-Control max-age=300
+req api.example.com /analytics/reports/x;    status 200; proxied; secure; has Cache-Control max-age=900
+# Admin assets go to admin_app, not a static-files regex location.
+req admin.example-site.com /app.js;          status 200; proxied; secure
+
+# Preflights in if-blocks used to lose every CORS header set on the location.
+req your-load-balanced-app.com /api/x -X OPTIONS -H 'Origin: https://a.test'
+                                             status 204; secure; has Access-Control-Allow-Origin https://a.test
+req your-docker-app.com /api/x -X OPTIONS -H 'Origin: https://a.test'
+                                             status 204; secure; has Access-Control-Allow-Origin https://a.test
+req80 dev.local /x -X OPTIONS -H 'Origin: https://a.test'
+                                             status 204; no_dupes; has Access-Control-Allow-Origin https://a.test
+
+# Server-level CSP must survive cache-header locations.
+for p in / /login /public/x /avatar/x /style.css /health; do
+    req grafana.example.com "$p";            secure; has Content-Security-Policy
+done
+req netbox.example.com /health;              status 200; secure; has Content-Type application/json
+req librenms.example.com /health;            status 200; secure; has Content-Type application/json
 
 echo "Summary: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -9,9 +9,13 @@ Production-ready, modular nginx configuration for multi-site hosting with securi
 ## Validation
 
 ```bash
-sudo nginx -t                # Test syntax (run after every change)
+make test                    # validate (nginx -t per template) + test-runtime (Docker, curl assertions)
+make lint                    # shellcheck scripts/ and tests/runtime/
+sudo nginx -t                # On a host: test syntax (run after every change)
 sudo nginx -s reload         # Graceful reload (no downtime)
 ```
+
+`make test-runtime` (`tests/runtime/`) enables every template at once in `nginx:mainline`, points all upstreams at an echo stub, and asserts response headers and upstream-received headers. Add an assertion to `tests/runtime/run.sh` for any header/routing behaviour you change — `nginx -t` can't see those bugs.
 
 ## Architecture
 
@@ -36,8 +40,8 @@ nginx.conf
 
 ```nginx
 # Server level
-include sites-security/domain.conf;     # Site-specific CSP, HSTS (optional)
-include snippets/security-headers.conf; # Generic security headers
+include snippets/security-headers.conf; # Generic security headers — OR, not both:
+# include sites-security/domain.conf;   # site-specific full header set (CSP, COEP, ...)
 include snippets/http3.conf;            # Alt-Svc header for HTTP/3
 include snippets/deny-files.conf;       # Block .git, .env, backups
 
@@ -48,18 +52,23 @@ location /api/ {
 }
 ```
 
-### add_header inheritance (nginx gotcha)
+### add_header inheritance
 
-When a `location` block has ANY `add_header` directive, nginx silently drops ALL parent-level `add_header` directives. This means security headers from the server block are lost.
+Stock nginx drops ALL parent `add_header` directives in any `location` (or `if`) that sets its own. `conf.d/headers.conf` sets `add_header_inherit merge` at http level (requires nginx >= 1.29.3), so locations append to the server's headers instead. Consequences:
 
-**Fix:** Add `include snippets/security-headers.conf;` inside every location block that uses its own `add_header`:
+- **Never** re-include `snippets/security-headers.conf` (or http3.conf) inside a location — with merge every header is sent twice.
+- Set each header name at **one** level. A name set at server and location level is sent twice. To override a header for a whole server (e.g. admin's `X-Frame-Options DENY`), give that server its own `sites-security/` file instead of layering on top.
+- Don't combine `expires` with `add_header Cache-Control` — `expires` emits its own Cache-Control. Put `max-age` in the Cache-Control value.
+- Use `default_type`, not `add_header Content-Type` (which adds a second Content-Type).
+- An OPTIONS `if` must come **before** any `rewrite ... break` in the same location; `break` stops the rewrite phase, so the `if` never runs.
 
 ```nginx
 location /static/ {
-    include snippets/security-headers.conf;  # Re-include, or security headers are lost
-    add_header Cache-Control "public, immutable";
+    add_header Cache-Control "public, max-age=31536000, immutable";  # HSTS/CSP/Alt-Svc still inherited
 }
 ```
+
+`make test-runtime` asserts no duplicate headers and that security headers reach every tested location.
 
 ### sites-security/ files
 
@@ -120,6 +129,7 @@ sudo nginx -s reload
 | File | Purpose |
 |------|---------|
 | `conf.d/proxy.conf` | Global proxy timeouts (60s), buffering, HTTP/1.1 upstream |
+| `conf.d/headers.conf` | `add_header_inherit merge` — server headers reach every location (nginx >= 1.29.3) |
 | `conf.d/maps.conf` | WebSocket upgrade mapping, RFC 7239 forwarded header |
 | `conf.d/tls-intermediate.conf` | TLS 1.2+1.3, Mozilla Intermediate ciphers, OCSP |
 | `conf.d/tls-modern.conf` | TLS 1.3 only (optional, stricter) |

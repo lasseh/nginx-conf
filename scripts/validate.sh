@@ -87,6 +87,7 @@ http {
     default_type application/octet-stream;
     include $STAGE/conf.d/logformat.conf;
     access_log $RUN/logs/access.log elk_json;
+    include $STAGE/conf.d/headers.conf;
     include $STAGE/conf.d/maps.conf;
     include $STAGE/conf.d/security.conf;
     include $STAGE/conf.d/performance.conf;
