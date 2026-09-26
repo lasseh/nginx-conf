@@ -24,6 +24,11 @@
 ## Advanced Security (Optional)
 
 ### Fail2ban Integration
+access.log is JSON (`elk_json`), so give fail2ban its own text log using the
+`fail2ban` format from `conf.d/logformat.conf`, in addition to elk_json:
+```nginx
+access_log /var/log/nginx/fail2ban.log fail2ban;
+```
 ```bash
 # /etc/fail2ban/filter.d/nginx-security.conf
 [Definition]
@@ -33,7 +38,7 @@ failregex = ^<HOST> -.*"(GET|POST|HEAD).*" (404|403|400|444) .*$
 [nginx-security]
 enabled = true
 filter = nginx-security
-logpath = /var/log/nginx/access.log
+logpath = /var/log/nginx/fail2ban.log
 maxretry = 5
 bantime = 3600
 ```
@@ -102,8 +107,9 @@ nikto -h https://yourdomain.com
 
 ### Log Analysis
 ```bash
+# access.log is elk_json: status is a JSON field
 # Attack patterns
-grep "444\|403\|404" /var/log/nginx/access.log
+grep -E '"status":(444|403|404)' /var/log/nginx/access.log
 
 # SQL injection attempts
 grep -i "union\|select\|drop\|insert" /var/log/nginx/access.log

@@ -37,7 +37,8 @@ Thank you for your interest in contributing to this modern nginx configuration r
 - Test all example commands
 
 ### Testing
-- Test configurations with `nginx -t`
+- Run `make test` (`make validate` + `make test-runtime`) and `make lint`
+- Add an assertion to `tests/runtime/run.sh` for header or routing behaviour you change
 - Verify SSL/TLS settings with SSL Labs
 - Test rate limiting and security headers
 - Validate against production scenarios
@@ -55,11 +56,11 @@ Thank you for your interest in contributing to this modern nginx configuration r
 git clone https://github.com/yourusername/nginx-conf.git
 cd nginx-conf
 
-# Test configuration syntax
-sudo nginx -t -c nginx.conf
+# nginx -t on every template, snippet and nginx.conf (local nginx >= 1.29.3, no root)
+make validate
 
-# Test specific site configuration
-sudo nginx -t -c sites-available/example-site.com.conf
+# All templates enabled together in Docker, with curl assertions
+make test-runtime
 ```
 
 ## Questions?

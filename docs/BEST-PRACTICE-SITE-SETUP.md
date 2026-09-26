@@ -40,8 +40,9 @@ admin.example-site.com (Admin Panel)
 # Copy the example configuration
 sudo cp /etc/nginx/sites-available/example-site.com.conf /etc/nginx/sites-available/yourdomain.com.conf
 
-# Copy the security configuration
+# Copy the security configurations (main site + stricter admin subdomain)
 sudo cp /etc/nginx/sites-security/example-site.com.conf /etc/nginx/sites-security/yourdomain.com.conf
+sudo cp /etc/nginx/sites-security/admin.example-site.com.conf /etc/nginx/sites-security/admin.yourdomain.com.conf
 
 # Edit configurations for your domain
 sudo nano /etc/nginx/sites-available/yourdomain.com.conf
@@ -56,8 +57,9 @@ Use sed to replace all instances of the example domain:
 # Replace domain in main configuration
 sudo sed -i 's/example-site\.com/yourdomain.com/g' /etc/nginx/sites-available/yourdomain.com.conf
 
-# Replace domain in security configuration
+# Replace domain in security configurations
 sudo sed -i 's/example-site\.com/yourdomain.com/g' /etc/nginx/sites-security/yourdomain.com.conf
+sudo sed -i 's/example-site\.com/yourdomain.com/g' /etc/nginx/sites-security/admin.yourdomain.com.conf
 ```
 
 ### 3. Configure Backend Services
@@ -130,8 +132,7 @@ sudo nginx -s reload
 ```nginx
 # Aggressive caching for static assets
 location ~* \.(css|js|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot|webp|avif)$ {
-    expires 1y;
-    add_header Cache-Control "public, immutable";
+    add_header Cache-Control "public, max-age=31536000, immutable";
     add_header Vary "Accept-Encoding";
     access_log off;
 }
@@ -187,10 +188,13 @@ add_header Access-Control-Allow-Credentials "true" always;
 ### Admin Subdomain Security
 
 #### Enhanced Security Headers
+The admin server includes its own header file *instead of* the main site's,
+because nginx can't override a header that was already added at the same level:
+
 ```nginx
-# Strict security for admin area
-add_header X-Frame-Options "DENY" always;
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; object-src 'none'; frame-ancestors 'none';" always;
+# sites-security/admin.example-site.com.conf: X-Frame-Options DENY, a CSP with
+# frame-ancestors 'none', and a longer Permissions-Policy deny list
+include sites-security/admin.example-site.com.conf;
 ```
 
 #### Optional IP Whitelisting
@@ -216,8 +220,7 @@ server_name example-site.com www.example-site.com api.example-site.com admin.exa
 
 ```nginx
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
+    include snippets/listen-https.conf;
     server_name blog.example-site.com;
     
     # SSL and includes...
@@ -300,22 +303,14 @@ sudo htpasswd /etc/nginx/.htpasswd user2
 
 ### Content Security Policy
 
-The included CSP is balanced for common use cases. Customize for your needs:
+The included CSP is balanced for common use cases. To change it, edit the CSP
+line in `sites-security/yourdomain.com.conf`. Don't add a second
+`Content-Security-Policy` in the site config: browsers enforce both. Keep it on
+one line, because HTTP/2 rejects folded header values:
 
 ```nginx
 # Strict CSP for high-security sites
-add_header Content-Security-Policy "
-    default-src 'self';
-    script-src 'self';
-    style-src 'self';
-    img-src 'self' data:;
-    font-src 'self';
-    connect-src 'self';
-    object-src 'none';
-    frame-ancestors 'none';
-    base-uri 'self';
-    form-action 'self';
-" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';" always;
 ```
 
 ### File Upload Security
@@ -333,7 +328,7 @@ location /upload/ {
     
     # Disable script execution
     location ~* \.(jpg|jpeg|png|gif|pdf|doc|docx)$ {
-        add_header X-Content-Type-Options nosniff;
+        # nosniff is inherited from the server's security headers
         add_header Content-Disposition "attachment";
     }
 }
@@ -360,6 +355,10 @@ location /api/upload/ {
 
 ### Custom Log Formats
 
+Every site's main access log must stay `elk_json`, the format the Alloy
+metrics pipeline parses. Extra formats go to an *additional* log file whose
+name doesn't contain `access`, so Alloy doesn't count requests twice.
+
 Add to `conf.d/logformat.conf`:
 
 ```nginx
@@ -378,10 +377,13 @@ log_format api_access '$remote_addr - $remote_user [$time_local] '
                      'request_id="$request_id"';
 ```
 
-Use in your configuration:
+Use in your configuration, next to the elk_json log:
 ```nginx
-access_log /var/log/nginx/yourdomain.com.access.log main_site;
-access_log /var/log/nginx/api.yourdomain.com.access.log api_access;
+access_log /var/log/nginx/yourdomain.com.access.log elk_json;
+access_log /var/log/nginx/yourdomain.com.timing.log main_site;
+
+access_log /var/log/nginx/api.yourdomain.com.access.log elk_json;
+access_log /var/log/nginx/api.yourdomain.com.keys.log api_access;
 ```
 
 ### Health Check Monitoring
@@ -535,8 +537,7 @@ location /api/data/ {
 # Precompressed files
 location ~* \.(css|js)$ {
     gzip_static on;
-    expires 1y;
-    add_header Cache-Control "public, immutable";
+    add_header Cache-Control "public, max-age=31536000, immutable";
 }
 
 # WebP image support

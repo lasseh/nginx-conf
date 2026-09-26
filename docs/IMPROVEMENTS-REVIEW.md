@@ -41,11 +41,11 @@ All bugs and issues below have been fixed.
 
 | Fix | Description | Resolution |
 |-----|-------------|------------|
-| FIX-1.2 | Duplicate `log_format security` name | Renamed to `security_monitor` in `snippets/security-monitoring.conf` |
+| FIX-1.2 | Duplicate `log_format security` name | Renamed to `security_monitor`; now defined in `conf.d/logformat.conf` |
 | FIX-2.1 | `deny-files.conf` blocks `/admin/` path globally | Removed `admin`, `administrator`, `wp-admin`, `config` from regex |
 | FIX-2.2 | `http3.conf` enables `ssl_early_data` unconditionally | Commented out with replay attack warning |
-| FIX-2.3 | `static-files.conf` location blocks clear parent security headers | Added `include snippets/security-headers.conf;` to each location block |
-| FIX-2.4 | NetBox missing security headers | Added `include snippets/security-headers.conf;` |
+| FIX-2.3 | `static-files.conf` location blocks clear parent security headers | Superseded: `conf.d/headers.conf` sets `add_header_inherit merge`, so locations no longer re-include security headers |
+| FIX-2.4 | NetBox missing security headers | Added `include snippets/security-headers.conf;` at server level |
 | FIX-2.5 | Inconsistent proxy header usage in api-gateway and grafana | Replaced manual headers with `include snippets/proxy-headers.conf;` |
 | FIX-2.6 | Redundant `include conf.d/proxy.conf` in location blocks | Replaced with `include snippets/proxy-headers.conf;` |
 | FIX-2.7 | WordPress inconsistent `fastcgi_params` paths | Normalized to relative paths |
@@ -76,7 +76,7 @@ By default nginx discards ALL parent `add_header` directives when a child locati
 
 ### Proxy Header Pattern
 
-All proxy locations should use `include snippets/proxy-headers.conf;` for standard headers (Host, X-Real-IP, X-Forwarded-For, X-Forwarded-Proto, X-Forwarded-Host, X-Request-ID). Service-specific headers go after the include.
+All proxy locations should use `include snippets/proxy-headers.conf;` for standard headers (Host, X-Real-IP, X-Forwarded-For, X-Forwarded-Proto, X-Forwarded-Host, X-Request-ID, Upgrade, Connection). WebSocket locations need nothing extra, and upstream keepalive works because non-WebSocket requests get an empty Connection header. Service-specific headers go after the include; never repeat one the snippet sets.
 
 `conf.d/proxy.conf` is loaded globally at the HTTP level in `nginx.conf` and sets proxy defaults (timeouts, buffering). It should NOT be included in location blocks — use `snippets/proxy-headers.conf` instead.
 
@@ -89,7 +89,11 @@ Rate limiting is disabled by default across all configurations. See `docs/RATE-L
 ## Testing Commands
 
 ```bash
-# Test configuration syntax
+# Repository tests (no root needed)
+make test     # make validate (nginx -t on templates, snippets, nginx.conf) + make test-runtime (Docker)
+make lint     # shellcheck
+
+# Test configuration syntax on a host
 sudo nginx -t
 
 # Check for duplicate log_format names

@@ -13,13 +13,12 @@ Complete reference for all nginx site configuration templates in `sites-availabl
    - [reverse-proxy.conf](#2-reverse-proxyconf) - Simple backend proxy
    - [example-site.com.conf](#3-example-sitecomconf) - Full-featured multi-subdomain
    - [api-gateway.example.com.conf](#4-api-gatewayexamplecomconf) - Microservices routing
-   - [wordpress.conf](#5-wordpressconf) - WordPress with PHP-FPM
-   - [docker-compose.conf](#6-docker-composeconf) - Container services
-   - [load-balancer.conf](#7-load-balancerconf) - Multi-server load balancing
-   - [development.conf](#8-developmentconf) - Local development
-   - [grafana.example.com.conf](#9-grafanaexamplecomconf) - Grafana monitoring
-   - [librenms.example.com.conf](#10-librenmsexamplecomconf) - LibreNMS network monitoring
-   - [netbox.example.com.conf](#11-netboxexamplecomconf) - NetBox IPAM/DCIM
+   - [docker-compose.conf](#5-docker-composeconf) - Container services
+   - [load-balancer.conf](#6-load-balancerconf) - Multi-server load balancing
+   - [development.conf](#7-developmentconf) - Local development
+   - [grafana.example.com.conf](#8-grafanaexamplecomconf) - Grafana monitoring
+   - [librenms.example.com.conf](#9-librenmsexamplecomconf) - LibreNMS network monitoring
+   - [netbox.example.com.conf](#10-netboxexamplecomconf) - NetBox IPAM/DCIM
 4. [Common Patterns](#common-patterns)
 5. [Customization Tips](#customization-tips)
 
@@ -31,7 +30,6 @@ Complete reference for all nginx site configuration templates in `sites-availabl
 |----------|----------|---------|------------|----------|
 | `static-site.conf` | Static HTML/SPA | None | ⭐ Beginner | React, Vue, Angular, HTML sites |
 | `reverse-proxy.conf` | Single backend app | HTTP | ⭐ Beginner | Node.js, Python, Go applications |
-| `wordpress.conf` | WordPress/PHP | PHP-FPM | ⭐⭐ Intermediate | WordPress, PHP applications |
 | `docker-compose.conf` | Container routing | Docker | ⭐⭐ Intermediate | Docker services, containers |
 | `development.conf` | Local dev server | HTTP | ⭐ Beginner | Development environments |
 | `example-site.com.conf` | Multi-subdomain | HTTP | ⭐⭐⭐ Advanced | Complex multi-service sites |
@@ -50,7 +48,7 @@ Complete reference for all nginx site configuration templates in `sites-availabl
 **Step 1: Choose Your Template**
 - **Static website?** → Use `static-site.conf`
 - **Backend API/app?** → Use `reverse-proxy.conf`
-- **WordPress?** → Use `wordpress.conf`
+- **PHP app?** → Start from `librenms.example.com.conf` (uses `snippets/php-fpm.conf`)
 - **Docker containers?** → Use `docker-compose.conf`
 
 **Step 2: Copy and Customize**
@@ -66,7 +64,7 @@ sudo nano /etc/nginx/sites-available/mysite.com.conf
 Every template requires these changes:
 1. **`server_name`** - Change to your actual domain
 2. **SSL certificate paths** - Update `/etc/letsencrypt/live/YOUR-DOMAIN/`
-3. **Backend addresses** (if applicable) - Update `proxy_pass` or `upstream` blocks
+3. **Backend addresses** (if applicable) - Update `proxy_pass` or `upstream` blocks, and rename the upstreams: upstream names are global across all enabled sites
 4. **Root directory** (for static sites) - Update `root` directive
 
 **Step 4: Get SSL Certificate**
@@ -112,8 +110,7 @@ try_files $uri $uri/ /index.html;
 
 # Aggressive caching for assets
 location ~* \.(css|js|jpg|jpeg|png|gif|ico|svg|woff|woff2)$ {
-    expires 1y;
-    add_header Cache-Control "public, immutable";
+    add_header Cache-Control "public, max-age=31536000, immutable";
 }
 
 # Security headers included
@@ -171,7 +168,7 @@ Proxies requests to a single backend application with health checks, failover, a
 #### Key Features
 ```nginx
 # Backend definition with keepalive
-upstream backend_app {
+upstream your_app_backend {
     server 127.0.0.1:3000;
     keepalive 32;
 }
@@ -188,8 +185,8 @@ include snippets/error-pages.conf;
 
 #### What to Customize
 ```nginx
-# 1. Backend server address
-upstream backend_app {
+# 1. Backend server address (rename per site)
+upstream your_app_backend {
     server 127.0.0.1:3000;    # Change port if needed
 }
 
@@ -205,13 +202,15 @@ proxy_read_timeout 60s;
 ```
 
 #### WebSocket Support
-Uncomment this block if your app uses WebSockets:
+`snippets/proxy-headers.conf` forwards the WebSocket handshake, so `location /`
+already accepts WebSockets. For long-lived sockets on a dedicated path, only
+the timeouts differ:
 ```nginx
 location /ws {
-    proxy_pass http://backend_app;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection $connection_upgrade;
+    proxy_pass http://your_app_backend;
+    include snippets/proxy-headers.conf;
     proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
 }
 ```
 
@@ -364,97 +363,21 @@ location /status/auth {
     proxy_pass http://auth_service/health;
 }
 
-# JSON error responses
-error_page 500 502 503 504 /50x.json;
-location = /50x.json {
-    return 500 '{"error":"Internal server error"}';
-}
+# JSON error responses (404, 429, 500, 502-504) from html/errors/*.json
+include snippets/error-pages-json.conf;
 
-# CORS for web apps
-add_header Access-Control-Allow-Origin "$http_origin";
+# CORS for web apps, at server level (inherited by every location)
+add_header Access-Control-Allow-Origin "$http_origin" always;
+
+# Answer preflights at server level, before location matching
+if ($request_method = OPTIONS) {
+    return 204;
+}
 ```
 
 ---
 
-### 5. `wordpress.conf`
-**→ WordPress with PHP-FPM**
-
-#### What It Does
-Optimized WordPress configuration with security hardening, PHP-FPM integration, and caching.
-
-#### Use This When
-- Running WordPress
-- Any PHP application
-- Using PHP-FPM
-
-#### Key Features
-```nginx
-# WordPress-specific security
-location ~ /\.(htaccess|htpasswd|env) { deny all; }
-location ~ /wp-config.php { deny all; }
-location ~ /readme.html { deny all; }
-
-# PHP-FPM processing
-location ~ \.php$ {
-    fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
-    fastcgi_index index.php;
-    include fastcgi_params;
-}
-
-# WordPress permalinks
-try_files $uri $uri/ /index.php?$args;
-
-# Static file caching
-location ~* \.(jpg|jpeg|png|gif|ico|css|js)$ {
-    expires 1y;
-}
-```
-
-#### What to Customize
-```nginx
-# 1. Domain and SSL
-server_name mywordpress.com www.mywordpress.com;
-ssl_certificate /etc/letsencrypt/live/mywordpress.com/fullchain.pem;
-
-# 2. WordPress directory
-root /var/www/mywordpress;
-
-# 3. PHP-FPM version/socket
-fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;  # Update PHP version
-
-# 4. Upload size (for media uploads)
-client_max_body_size 100M;
-
-# 5. (Optional) Restrict wp-admin by IP
-location /wp-admin/ {
-    allow YOUR_IP;
-    deny all;
-    # ... php handling
-}
-```
-
-#### Quick Setup
-```bash
-# Install WordPress
-sudo mkdir -p /var/www/mywordpress
-cd /var/www/mywordpress
-sudo wget https://wordpress.org/latest.tar.gz
-sudo tar -xzvf latest.tar.gz --strip-components=1
-sudo chown -R nginx:nginx /var/www/mywordpress
-
-# Install PHP-FPM
-sudo apt install php8.2-fpm php8.2-mysql php8.2-curl php8.2-gd php8.2-xml
-
-# Deploy nginx config
-sudo cp sites-available/wordpress.conf sites-available/mywordpress.com.conf
-sudo nano sites-available/mywordpress.com.conf  # Update domain and paths
-sudo ln -s ../sites-available/mywordpress.com.conf sites-enabled/
-sudo nginx -t && sudo nginx -s reload
-```
-
----
-
-### 6. `docker-compose.conf`
+### 5. `docker-compose.conf`
 **→ Docker Container Services**
 
 #### What It Does
@@ -510,8 +433,7 @@ location /myapp/ {
 
 # Subdomain:
 server {
-    listen 443 ssl;
-    http2 on;
+    include snippets/listen-https.conf;
     server_name myapp.mysite.com;
     # SSL config...
     location / {
@@ -538,7 +460,7 @@ services:
 
 ---
 
-### 7. `load-balancer.conf`
+### 6. `load-balancer.conf`
 **→ Multi-Server Load Balancing**
 
 #### What It Does
@@ -618,7 +540,7 @@ upstream backend {
 
 ---
 
-### 8. `development.conf`
+### 7. `development.conf`
 **→ Local Development Environment**
 
 #### What It Does
@@ -671,7 +593,7 @@ echo "127.0.0.1 myapp.local" | sudo tee -a /etc/hosts
 
 ---
 
-### 9. `grafana.example.com.conf`
+### 8. `grafana.example.com.conf`
 **→ Grafana Monitoring Dashboard**
 
 #### What It Does
@@ -684,23 +606,19 @@ Proxies Grafana with WebSocket support for live updates and proper security head
 #### Key Features
 ```nginx
 # Grafana upstream
-upstream grafana {
+upstream grafana_backend {
     server 127.0.0.1:3000;
-    keepalive 16;
+    keepalive 32;
 }
 
-# WebSocket support for live dashboards
-proxy_set_header Upgrade $http_upgrade;
-proxy_set_header Connection $connection_upgrade;
-
-# Grafana-specific headers
-proxy_set_header Host $host;
+# Standard proxy headers, including the WebSocket handshake for live dashboards
+include snippets/proxy-headers.conf;
 ```
 
 #### What to Customize
 ```nginx
 # 1. Grafana port (if changed from default)
-upstream grafana {
+upstream grafana_backend {
     server 127.0.0.1:3000;  # Default Grafana port
 }
 
@@ -712,13 +630,14 @@ ssl_certificate /etc/letsencrypt/live/grafana.mysite.com/fullchain.pem;
 location / {
     auth_basic "Grafana Login";
     auth_basic_user_file /etc/nginx/.htpasswd;
-    proxy_pass http://grafana;
+    proxy_pass http://grafana_backend;
+    include snippets/proxy-headers.conf;
 }
 ```
 
 ---
 
-### 10. `librenms.example.com.conf`
+### 9. `librenms.example.com.conf`
 **→ LibreNMS Network Monitoring**
 
 #### What It Does
@@ -730,24 +649,24 @@ Proxies LibreNMS with PHP-FPM support and proper security for network monitoring
 
 #### Key Features
 ```nginx
-# PHP-FPM for LibreNMS
-location ~ \.php$ {
-    fastcgi_pass unix:/var/run/php/php-fpm.sock;
-    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-}
+# PHP-FPM for LibreNMS (location ~ \.php$ lives in the snippet)
+include snippets/php-fpm.conf;
 
-# LibreNMS security
-location ~ /\.ht { deny all; }
-location ~ /\.git { deny all; }
+# Longer PHP timeouts, inherited by the snippet's location
+fastcgi_read_timeout 300s;
+
+# LibreNMS security: generic rules plus Laravel-specific paths
+include snippets/deny-files.conf;
+location ~ ^/(\.git|\.env|\.htaccess|config|storage|bootstrap/cache|composer\.(json|lock)) { deny all; }
 ```
 
 ---
 
-### 11. `netbox.example.com.conf`
+### 10. `netbox.example.com.conf`
 **→ NetBox IPAM/DCIM**
 
 #### What It Does
-Proxies NetBox with WebSocket support for real-time updates.
+Proxies everything to NetBox, which serves its own static files. WebSockets work through `snippets/proxy-headers.conf`.
 
 #### Use This When
 - Running NetBox
@@ -757,22 +676,15 @@ Proxies NetBox with WebSocket support for real-time updates.
 #### Key Features
 ```nginx
 # NetBox upstream
-upstream netbox {
+upstream netbox_backend {
     server 127.0.0.1:8001;
-    keepalive 16;
+    keepalive 32;
 }
 
-# WebSocket for live updates
-location /ws/ {
-    proxy_pass http://netbox;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection $connection_upgrade;
-}
-
-# Static files
-location /static/ {
-    alias /opt/netbox/netbox/static/;
-    expires 1y;
+# One location: NetBox handles its own routing and static files
+location / {
+    proxy_pass http://netbox_backend;
+    include snippets/proxy-headers.conf;
 }
 ```
 
@@ -820,17 +732,17 @@ location / {
 ### Pattern 4: CORS Headers
 
 ```nginx
-# Simple CORS (API)
+# Simple CORS (API), server level. conf.d/headers.conf (add_header_inherit
+# merge) passes these to every location and to the preflight below; don't
+# repeat them inside the `if` or they are sent twice.
 add_header Access-Control-Allow-Origin "$http_origin" always;
 add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE" always;
+add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
 add_header Access-Control-Allow-Credentials "true" always;
+add_header Access-Control-Max-Age 86400 always;
 
-# Handle preflight
+# Answer preflights before location matching
 if ($request_method = OPTIONS) {
-    add_header Access-Control-Allow-Origin "$http_origin";
-    add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE";
-    add_header Access-Control-Allow-Headers "Authorization, Content-Type";
-    add_header Access-Control-Max-Age 86400;
     return 204;
 }
 ```
@@ -838,7 +750,8 @@ if ($request_method = OPTIONS) {
 ### Pattern 5: Custom Error Pages
 
 ```nginx
-# Include custom error pages
+# Include custom error pages (404/500/502/504; 503 is left to maintenance
+# handlers like Pattern 6)
 include snippets/error-pages.conf;
 
 # Or define custom ones
@@ -938,7 +851,7 @@ sudo tail -f /var/log/nginx/error.log
 - Update all domain references
 - Verify backend is running before configuring proxy
 - Use symlinks for sites-enabled
-- Include appropriate snippets (proxy-headers, security-headers)
+- Include appropriate snippets (proxy-headers; security-headers OR a sites-security file, never both)
 - Set appropriate timeouts for your application
 
 ---

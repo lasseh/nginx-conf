@@ -121,10 +121,16 @@ location /auth/ {
 Pre-configured CORS headers for web application access:
 
 ```nginx
-# CORS headers for API access
+# CORS headers for API access (server level; inherited by every location
+# through add_header_inherit merge in conf.d/headers.conf)
 add_header Access-Control-Allow-Origin "$http_origin" always;
 add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS" always;
 add_header Access-Control-Allow-Credentials "true" always;
+
+# Preflights are answered at server level, before location matching
+if ($request_method = 'OPTIONS') {
+    return 204;
+}
 ```
 
 ### Error Handling
@@ -132,13 +138,8 @@ add_header Access-Control-Allow-Credentials "true" always;
 JSON error responses for API consistency:
 
 ```nginx
-# Custom error pages return JSON
-error_page 500 502 503 504 /50x.json;
-location = /50x.json {
-    internal;
-    add_header Content-Type "application/json" always;
-    return 500 '{"error":"Internal server error","timestamp":"$time_iso8601"}';
-}
+# JSON error pages (404, 429, 500, 502-504) served from html/errors/*.json
+include snippets/error-pages-json.conf;
 ```
 
 ## 🔧 Customization Examples
@@ -185,10 +186,10 @@ upstream user_service {
 
 ```nginx
 location /users/profile {
-    # Cache user profiles for 5 minutes
+    # Cache user profiles for 5 minutes (put this `if` before any
+    # `rewrite ... break`, which would stop it from running)
     if ($request_method = GET) {
-        expires 5m;
-        add_header Cache-Control "public, must-revalidate";
+        add_header Cache-Control "public, max-age=300, must-revalidate";
     }
 
     proxy_pass http://user_service;
@@ -223,7 +224,9 @@ location = /auth/verify {
 
 ### Custom Log Format
 
-Add to `conf.d/logformat.conf`:
+The template logs in `elk_json`, which already records `upstream_addr`,
+`upstream_response_time`, `request_id` and `response_time`, and feeds the Alloy
+metrics. For an extra text log, add a format to `conf.d/logformat.conf`:
 
 ```nginx
 log_format api_gateway '$remote_addr - $remote_user [$time_local] '
@@ -234,10 +237,12 @@ log_format api_gateway '$remote_addr - $remote_user [$time_local] '
                       'sid="$upstream_addr" rid="$request_id"';
 ```
 
-Use in your API gateway:
+Use it as an *additional* log, next to the elk_json one. Keep `access` out of
+the filename, or Alloy counts every request twice:
 
 ```nginx
-access_log /var/log/nginx/api-gateway.access.log api_gateway;
+access_log /var/log/nginx/api-gateway.access.log elk_json;
+access_log /var/log/nginx/api-gateway.timing.log api_gateway;
 ```
 
 ### Health Check Endpoint
@@ -396,8 +401,7 @@ upstream backend_service {
 ```nginx
 # Cache static API responses
 location ~* ^/api/static/.*\.(json|xml)$ {
-    expires 1h;
-    add_header Cache-Control "public, immutable";
+    add_header Cache-Control "public, max-age=3600, immutable";
     proxy_pass http://backend_service;
 }
 

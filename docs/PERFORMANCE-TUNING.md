@@ -352,9 +352,8 @@ find /var/www -type f \( -name '*.css' -o -name '*.js' \) -exec gzip -k9 {} \;
 
 ```nginx
 location ~* \.(jpg|jpeg|png|gif|ico|svg|webp|avif)$ {
-    # Cache for 1 year
-    expires 1y;
-    add_header Cache-Control "public, immutable";
+    # Cache for 1 year (max-age here; `expires` would add a second Cache-Control)
+    add_header Cache-Control "public, max-age=31536000, immutable";
 
     # Don't log static files
     access_log off;
@@ -472,9 +471,10 @@ upstream backend {
 location / {
     proxy_pass http://backend;
 
-    # Required for keepalive
-    proxy_http_version 1.1;
-    proxy_set_header Connection "";
+    # Keepalive needs HTTP/1.1 (set globally in conf.d/proxy.conf) and no
+    # "Connection: close". proxy-headers.conf sends an empty Connection for
+    # normal requests and "upgrade" only for WebSocket handshakes.
+    include snippets/proxy-headers.conf;
 }
 ```
 

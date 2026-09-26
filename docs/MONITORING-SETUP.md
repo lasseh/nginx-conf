@@ -60,8 +60,9 @@ fi
 
 ### **Prometheus Integration:**
 ```bash
-# Export metrics for Prometheus (requires nginx-prometheus-exporter)
-curl http://localhost/nginx-status | nginx-prometheus-exporter
+# Export metrics for Prometheus: the exporter scrapes stub_status itself
+nginx-prometheus-exporter --nginx.scrape-uri=http://127.0.0.1/nginx-status
+# or: docker compose -f monitoring/prometheus/nginx-exporter.yml up -d  (network_mode: host)
 ```
 
 ## 🛡️ **Security Features**
@@ -70,7 +71,7 @@ curl http://localhost/nginx-status | nginx-prometheus-exporter
 - ✅ **Localhost only** - `127.0.0.1` and `::1`
 - ✅ **Private networks** - Optional internal network access
 - ✅ **Default deny** - Blocks all external access
-- ✅ **Exact matching** - Prevents path traversal
+- ✅ **Anchored regex match** (`~ ^/nginx[-_]status$`) - Nothing else under the path is served
 
 ### **Security Headers:**
 - ✅ **Content-Type protection** - Prevents MIME confusion
@@ -79,7 +80,7 @@ curl http://localhost/nginx-status | nginx-prometheus-exporter
 
 ### **Performance Optimization:**
 - ✅ **No access logging** - Reduces I/O overhead
-- ✅ **Exact location match** - Faster routing
+- ✅ **Single anchored location** - Matches only the two status URLs
 - ✅ **Minimal processing** - Lightweight endpoint
 
 ## 🔧 **Configuration Options**

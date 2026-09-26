@@ -69,8 +69,8 @@ This guide explains the differences between HTTP versions and provides implement
 
 ## Recommendation
 
-### Current Status: HTTP/2 (Good)
-Your nginx configuration currently uses HTTP/2, which is the recommended baseline for all modern HTTPS sites.
+### Current Status: HTTP/2 + HTTP/3
+Every HTTPS server includes `snippets/listen-https.conf` (TLS + QUIC listeners, `http2 on`, `http3 on`, and the Alt-Svc header from `snippets/http3.conf`). UDP 443 must be open for browsers to actually use HTTP/3; otherwise they stay on HTTP/2.
 
 ### When to Enable HTTP/3
 
@@ -114,19 +114,19 @@ server {
 }
 ```
 
-**After (HTTP/2 + HTTP/3):**
+**After (HTTP/2 + HTTP/3), as shipped in `snippets/listen-https.conf`:**
 ```nginx
 server {
     listen                  443 ssl;
-    listen                  443 quic reuseport;
+    listen                  443 quic;
     listen                  [::]:443 ssl;
-    listen                  [::]:443 quic reuseport;
+    listen                  [::]:443 quic;
     http2                   on;
     http3                   on;
     server_name             example-site.com;
 
-    # Advertise HTTP/3 support to browsers
-    add_header              Alt-Svc 'h3=":443"; ma=86400';
+    # Advertise HTTP/3 support to browsers (snippets/http3.conf)
+    add_header              Alt-Svc 'h3=":443"; ma=86400' always;
 
     ssl_certificate         /etc/letsencrypt/live/example-site.com/fullchain.pem;
     ssl_certificate_key     /etc/letsencrypt/live/example-site.com/privkey.pem;
@@ -149,39 +149,15 @@ sudo firewall-cmd --permanent --add-port=443/udp
 sudo firewall-cmd --reload
 ```
 
-### 4. Update nginx.conf Comment
+### 4. Already Applied in This Repo
 
-Remove or update the comment in `nginx.conf:108`:
+Every HTTPS template includes `snippets/listen-https.conf`, which contains the
+listen/http2/http3 lines above plus `snippets/http3.conf` (Alt-Svc, QUIC
+settings). `sites-available/defaults-443.conf`, the default server, is the only
+block with `reuseport`. To change HTTP/3 behaviour for every site, edit those
+two files.
 
-**Before:**
-```nginx
-# Key Features:
-#   - HTTP/2 enabled on all HTTPS sites
-#   - No HTTP/3/QUIC (experimental, causes issues)
-```
-
-**After:**
-```nginx
-# Key Features:
-#   - HTTP/2 + HTTP/3 enabled on all HTTPS sites
-#   - QUIC support for improved mobile performance
-```
-
-### 5. Apply Changes
-
-Apply changes to all HTTPS server blocks in:
-- `sites-available/example-site.com.conf` (3 server blocks)
-- `sites-available/api-gateway.example.com.conf`
-- `sites-available/wordpress.conf`
-- `sites-available/static-site.conf`
-- `sites-available/reverse-proxy.conf`
-- `sites-available/librenms.example.com.conf`
-- `sites-available/netbox.example.com.conf`
-- `sites-available/grafana.example.com.conf`
-- `sites-available/defaults-443.conf`
-- Any other active sites in `sites-enabled/`
-
-### 6. Test Configuration
+### 5. Test Configuration
 
 ```bash
 # Test syntax
@@ -191,7 +167,7 @@ sudo nginx -t
 sudo nginx -s reload
 ```
 
-### 7. Verify HTTP/3 is Working
+### 6. Verify HTTP/3 is Working
 
 ```bash
 # Test with curl (requires curl with HTTP/3 support)
@@ -212,13 +188,18 @@ curl -I https://your-domain.com | grep -i alt-svc
 
 If issues occur, revert by:
 
-1. Remove QUIC listeners:
+1. Remove QUIC from the shared snippet and the default server:
    ```nginx
-   # Remove these lines:
-   listen                  443 quic reuseport;
-   listen                  [::]:443 quic reuseport;
+   # snippets/listen-https.conf — remove:
+   listen                  443 quic;
+   listen                  [::]:443 quic;
    http3                   on;
-   add_header              Alt-Svc 'h3=":443"; ma=86400';
+   include                 snippets/http3.conf;   # Alt-Svc
+
+   # sites-available/defaults-443.conf — remove:
+   listen 443 quic reuseport default_server;
+   listen [::]:443 quic reuseport default_server;
+   http3 on;
    ```
 
 2. Test and reload:
@@ -255,6 +236,4 @@ After enabling HTTP/3, monitor:
 
 ## Conclusion
 
-**Current recommendation: Stick with HTTP/2** unless you have specific performance requirements or high mobile traffic. HTTP/2 provides excellent performance with minimal complexity and universal support.
-
-When ready to implement HTTP/3, follow the steps above and monitor performance closely for the first few weeks.
+HTTP/3 is enabled in every template, with HTTP/2 as the automatic fallback. Open UDP 443 in the firewall and monitor for the first few weeks; use the rollback plan above if QUIC causes problems on your network.

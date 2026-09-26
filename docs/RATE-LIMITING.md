@@ -533,6 +533,10 @@ log_format ratelimit '$remote_addr - $remote_user [$time_local] '
                      '"$http_referer" "$http_user_agent" '
                      'limit_req_status=$limit_req_status';
 
+# An access_log here replaces the inherited ones at this level, so keep the
+# site's elk_json log next to it (Alloy metrics). The extra file must not have
+# "access" in its name, or Alloy counts requests twice.
+access_log /var/log/nginx/<site>.access.log elk_json;
 access_log /var/log/nginx/ratelimit.log ratelimit if=$limit_req_status;
 ```
 
@@ -542,8 +546,8 @@ access_log /var/log/nginx/ratelimit.log ratelimit if=$limit_req_status;
 # Watch rate limit hits in real-time
 tail -f /var/log/nginx/error.log | grep "limiting requests"
 
-# Count 503 responses
-grep " 503 " /var/log/nginx/access.log | wc -l
+# Count 503 responses (access.log is elk_json)
+grep '"status":503' /var/log/nginx/access.log | wc -l
 
 # Group by IP
 grep "limiting requests" /var/log/nginx/error.log | \
@@ -603,7 +607,7 @@ location /api/ {
 
 location @rate_limited {
     add_header Retry-After 60 always;
-    add_header Content-Type application/json always;
+    default_type application/json;
     return 429 '{"error":"Rate limit exceeded","retry_after":60}';
 }
 ```

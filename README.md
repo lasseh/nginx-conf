@@ -31,28 +31,31 @@ Production-ready, modular nginx configuration for secure and performant web host
 ├── conf.d/                     # Global HTTP-level configurations
 │   ├── cloudflare.conf         # Cloudflare IP ranges (optional)
 │   ├── fastcgi_params          # FastCGI parameter defaults
+│   ├── headers.conf            # add_header_inherit merge (nginx >= 1.29.3)
 │   ├── logformat.conf          # Custom log formats
 │   ├── maps.conf               # Variable mappings (WebSocket upgrade, etc.)
 │   ├── mime.types              # MIME type definitions
 │   ├── performance.conf        # Performance tuning
 │   ├── proxy.conf              # Proxy timeout and buffering defaults
 │   ├── security.conf           # Global security settings
-│   ├── security-monitoring.conf # Security monitoring maps/formats (optional)
+│   ├── security-monitoring.conf # Security monitoring maps (optional; formats are in logformat.conf)
 │   ├── tls-intermediate.conf   # SSL/TLS configuration (TLS 1.2+)
 │   └── tls-modern.conf         # TLS 1.3-only configuration (optional)
 │
 ├── snippets/                   # Reusable configuration blocks
 │   ├── common-locations.conf   # Shared location blocks (favicon, robots.txt)
 │   ├── deny-files.conf         # Block access to sensitive files
-│   ├── error-pages.conf        # HTML error pages (404, 500, 502, 503, 504)
+│   ├── error-pages.conf        # HTML error pages (404, 500, 502, 504; 503 left to maintenance handlers)
 │   ├── error-pages-json.conf   # JSON error pages for APIs
 │   ├── gzip.conf               # Compression settings
 │   ├── http3.conf              # HTTP/3 and QUIC headers
 │   ├── letsencrypt.conf        # ACME challenge support
+│   ├── listen-https.conf       # 443 ssl/quic v4+v6, http2, http3 (HTTPS server preamble)
 │   ├── method-filter.conf      # Restrict allowed HTTP methods
 │   ├── php-fpm.conf            # PHP-FPM FastCGI processing
 │   ├── proxy-headers.conf      # Standard proxy headers
 │   ├── rate-limiting.conf      # Rate limit configurations
+│   ├── redirect-to-https.conf  # Port-80 server body: ACME + 301 to https://$host
 │   ├── security-headers.conf   # Common security headers
 │   ├── security-monitoring.conf # Attack pattern detection (server-level)
 │   ├── static-files.conf       # Static asset caching
@@ -79,6 +82,7 @@ Production-ready, modular nginx configuration for secure and performant web host
 │                               # the one you want. defaults-443 needs a default cert.
 │
 ├── sites-security/             # Per-site security headers (CSP, etc)
+│   ├── admin.example-site.com.conf
 │   ├── example-site.com.conf
 │   └── whynoipv6.com.conf
 │
@@ -94,6 +98,8 @@ Production-ready, modular nginx configuration for secure and performant web host
 │   ├── alloy/                  # Grafana Alloy (log-derived metrics)
 │   ├── grafana/                # Grafana dashboard
 │   └── prometheus/             # Prometheus scrape config and alerts
+│
+├── tests/runtime/              # Docker runtime tests (make test-runtime)
 │
 └── examples/                   # Reference configurations
     ├── sse-example.conf        # Server-Sent Events
@@ -256,7 +262,7 @@ sudo nginx -t
 
 ### Repository Tests
 ```bash
-make validate       # nginx -t on every template in isolation (local nginx)
+make validate       # nginx -t on every template, every snippet and nginx.conf (local nginx)
 make test-runtime   # all templates enabled together in Docker, curl assertions
 make test           # both
 make lint           # shellcheck
@@ -294,8 +300,8 @@ wrk -t4 -c100 -d30s https://yoursite.com/
 ### Adding a New Site
 1. Choose appropriate template from `sites-available/`
 2. Copy to new filename: `yoursite.com.conf`
-3. Edit: `server_name`, SSL paths, backend upstreams
-4. Create security headers: `sites-security/yoursite.com.conf` (if needed)
+3. Edit: `server_name`, SSL paths, backend upstreams (rename upstreams — names are global across enabled sites)
+4. Create security headers: `sites-security/yoursite.com.conf` (if needed; include it *instead of* `snippets/security-headers.conf`, never both)
 5. Obtain SSL certificate with certbot
 6. Create symlink: `ln -s ../sites-available/yoursite.com.conf sites-enabled/`
 7. Test: `nginx -t`
@@ -330,7 +336,7 @@ server {
     include snippets/error-pages.conf;
 }
 ```
-Covers: 404, 500, 502, 503, 504 with styled HTML pages.
+Covers: 404, 500, 502, 504 with styled HTML pages. 503 is left out so it doesn't clash with a maintenance handler; add `error_page 503 /503.html;` if you want it.
 
 **JSON error pages** (APIs):
 ```nginx
@@ -341,7 +347,7 @@ server {
 ```
 Covers: 404, 429, 500, 502, 503, 504 with JSON responses.
 
-Alternatively, API configs can use inline responses for dynamic fields like timestamps — see `sites-available/api-gateway.example.com.conf` for examples.
+`sites-available/api-gateway.example.com.conf` uses `error-pages-json.conf` and returns inline JSON only for `/health` and its catch-all 404.
 
 ## 📊 Monitoring
 
@@ -443,11 +449,9 @@ sudo certbot renew --dry-run
 
 ### Updating Nginx
 ```bash
-# Ubuntu/Debian
-sudo apt update && sudo apt upgrade nginx
-
-# CentOS/RHEL
-sudo yum update nginx
+# Upgrade from the nginx.org mainline repository (>= 1.29.3 required)
+sudo apt update && sudo apt upgrade nginx   # Debian/Ubuntu with the nginx.org repo
+sudo dnf upgrade nginx                      # RHEL/Fedora with the nginx.org repo
 
 # After update, test and reload
 sudo nginx -t && sudo systemctl reload nginx
