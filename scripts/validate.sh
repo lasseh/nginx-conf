@@ -53,10 +53,37 @@ while IFS= read -r f; do
     -e "s#include[[:space:]]+(sites-security/)#include $STAGE/\1#g" \
     -e "s#/etc/nginx/#$STAGE/#g" \
     -e "s#/var/log/nginx/#$RUN/logs/#g" \
+    -e "s#^([[:space:]]*server[[:space:]]+)[a-z][a-z0-9-]*:([0-9]+)#\1127.0.0.1:\2#" \
     "$f" && rm -f "$f.bak"
 done < <(find "$STAGE" -path "$RUN" -prune -o -name '*.conf' -print)
 
-PASS=0; FAIL=0; SKIP=0; FAILED=()
+PASS=0; FAIL=0; FAILED=()
+
+# http_master FILE TLS BODY — write a standalone nginx.conf loading every
+# conf.d file (TLS profile selectable: the two set the same directives).
+http_master() {
+  local pidfile; pidfile="$RUN/tmp/${1##*/}.pid"
+  cat > "$1" <<EOF
+pid $pidfile;
+error_log $RUN/logs/error.log warn;
+events { worker_connections 1024; }
+http {
+    include $STAGE/conf.d/mime.types;
+    default_type application/octet-stream;
+    include $STAGE/conf.d/logformat.conf;
+    access_log $RUN/logs/access.log elk_json;
+    include $STAGE/conf.d/headers.conf;
+    include $STAGE/conf.d/maps.conf;
+    include $STAGE/conf.d/security.conf;
+    include $STAGE/conf.d/performance.conf;
+    include $STAGE/conf.d/proxy.conf;
+    include $STAGE/conf.d/$2;
+    include $STAGE/conf.d/cloudflare.conf;
+    include $STAGE/conf.d/security-monitoring.conf;
+$3
+}
+EOF
+}
 
 run_test() {
   local label="$1" master="$2"
@@ -74,30 +101,47 @@ echo "Per-site validation (each template in isolation):"
 for site in "$STAGE"/sites-available/*.conf "$STAGE"/sites-enabled/*.conf; do
   [ -f "$site" ] || continue
   name=$(basename "$site")
-  if [ "$name" = "docker-compose.conf" ]; then
-    SKIP=$((SKIP+1)); printf '  \033[33mSKIP\033[0m  %s  (uses docker service DNS names)\n' "$name"; continue
-  fi
   master="$RUN/tmp/master-$name"
-  cat > "$master" <<EOF
-pid $RUN/tmp/$name.pid;
-error_log $RUN/logs/error.log warn;
-events { worker_connections 1024; }
-http {
-    include $STAGE/conf.d/mime.types;
-    default_type application/octet-stream;
-    include $STAGE/conf.d/logformat.conf;
-    access_log $RUN/logs/access.log elk_json;
-    include $STAGE/conf.d/headers.conf;
-    include $STAGE/conf.d/maps.conf;
-    include $STAGE/conf.d/security.conf;
-    include $STAGE/conf.d/performance.conf;
-    include $STAGE/conf.d/proxy.conf;
-    include $STAGE/conf.d/tls-intermediate.conf;
-    include $site;
-}
-EOF
+  http_master "$master" tls-intermediate.conf "    include $site;"
   run_test "$name" "$master"
 done
+
+# Every snippet, included once in the context it documents — catches snippets
+# no template uses (missing log_format, zone, variable, ...).
+echo
+echo "Snippets (each included once, with tls-modern.conf):"
+master="$RUN/tmp/master-snippets.conf"
+http_master "$master" tls-modern.conf "    server {
+        include $STAGE/snippets/listen-https.conf;
+        server_name snippets.test;
+        ssl_certificate $CERT;
+        ssl_certificate_key $KEY;
+        root $RUN/tmp;
+        include $STAGE/snippets/security-headers.conf;
+        include $STAGE/snippets/deny-files.conf;
+        include $STAGE/snippets/gzip.conf;
+        include $STAGE/snippets/common-locations.conf;
+        include $STAGE/snippets/static-files.conf;
+        include $STAGE/snippets/error-pages.conf;
+        include $STAGE/snippets/stub-status.conf;
+        include $STAGE/snippets/php-fpm.conf;
+        include $STAGE/snippets/security-monitoring.conf;
+        include $STAGE/snippets/method-filter.conf;
+        location /p/ {
+            proxy_pass http://127.0.0.1:9;
+            include $STAGE/snippets/proxy-headers.conf;
+            include $STAGE/snippets/rate-limiting.conf;
+        }
+    }
+    server {
+        server_name redirect.test;
+        include $STAGE/snippets/redirect-to-https.conf;
+    }
+    server {
+        listen 127.0.0.1:8081;
+        include $STAGE/snippets/error-pages-json.conf;
+    }"
+run_test "snippets/*.conf" "$master"
 
 echo
 echo "Combined entrypoint (nginx.conf -> sites-enabled/*):"
@@ -108,6 +152,6 @@ sed -E -e 's/^user[[:space:]]+nginx;/# user nginx;/' \
 run_test "nginx.conf" "$entry"
 
 echo
-echo "Summary: $PASS passed, $FAIL failed, $SKIP skipped"
+echo "Summary: $PASS passed, $FAIL failed"
 [ "$FAIL" -gt 0 ] && { printf 'Failed: %s\n' "${FAILED[*]}"; exit 1; }
 exit 0

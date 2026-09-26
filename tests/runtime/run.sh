@@ -89,6 +89,9 @@ req api.example.com /users/1 -X OPTIONS -H 'Origin: https://a.test'
                                              status 204; secure; has Access-Control-Allow-Origin https://a.test
 req api.example.com /health;                 status 200; secure; has Content-Type application/json; has X-API-Gateway
 req api.example.com /nope;                   status 404; secure; has Content-Type application/json
+# nginx-generated errors use snippets/error-pages-json.conf (html/errors/*.json).
+req api.example.com /docs/nope;              status 404; secure; has Content-Type application/json
+check "404 body is not the JSON error page" grep -q '"error"' "$BODY"
 # Nested cache locations must still proxy (they used to serve from disk).
 req api.example.com /users/a.json;           status 200; proxied; secure; has Cache-Control max-age=300
 req api.example.com /analytics/reports/x;    status 200; proxied; secure; has Cache-Control max-age=900
