@@ -1,0 +1,21 @@
+# Runtime test rig: every site template enabled together behind one echo
+# upstream. Driven by `make test-runtime`; see tests/runtime/run.sh.
+name: nginx-conf-runtime
+
+services:
+  echo:
+    image: python:alpine
+    command: ["python", "-u", "/echo.py"]
+    volumes:
+      - ./echo.py:/echo.py:ro
+
+  nginx:
+    image: nginx:mainline
+    depends_on: [echo]
+    entrypoint: ["bash", "-c", "bash /src/tests/runtime/stage.sh && exec nginx -g 'daemon off;'"]
+    volumes:
+      - ../..:/src:ro
+    healthcheck:
+      test: ["CMD", "test", "-s", "/var/run/nginx.pid"]
+      interval: 1s
+      retries: 60

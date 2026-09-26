@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+#
+# run.sh — behaviour tests for the enabled templates.
+#
+# Runs inside the nginx container (see compose.yaml) against 127.0.0.1, with
+# every site enabled at once. Upstreams are the echo stub, whose response body
+# lists the request headers nginx forwarded — so each test can check both what
+# the client got back and what the backend received.
+#
+set -uo pipefail
+
+PASS=0; FAIL=0
+HDRS=$(mktemp); BODY=$(mktemp)
+trap 'rm -f "$HDRS" "$BODY"' EXIT
+
+# req HOST PATH [curl args...] — HTTPS request; fills $HDRS and $BODY.
+req() {
+    local host=$1 path=$2; shift 2
+    CURRENT="https://$host$path $*"
+    curl -sk --http1.1 -o "$BODY" -D "$HDRS" --resolve "$host:443:127.0.0.1" \
+        "$@" "https://$host$path" | tr -d '\r' >/dev/null
+    tr -d '\r' < "$HDRS" > "$HDRS.tmp" && mv "$HDRS.tmp" "$HDRS"
+}
+
+# req80 HOST PATH [curl args...] — plain HTTP request on port 80.
+req80() {
+    local host=$1 path=$2; shift 2
+    CURRENT="http://$host$path $*"
+    curl -s -o "$BODY" -D "$HDRS" --resolve "$host:80:127.0.0.1" \
+        "$@" "http://$host$path" >/dev/null
+    tr -d '\r' < "$HDRS" > "$HDRS.tmp" && mv "$HDRS.tmp" "$HDRS"
+}
+
+ok()   { PASS=$((PASS+1)); }
+fail() { FAIL=$((FAIL+1)); printf '  FAIL  %s\n        %s\n' "$CURRENT" "$1"; }
+
+# Response header assertions (case-insensitive names, ERE on the value).
+# check MESSAGE CMD... — pass if CMD succeeds.
+check() { local msg=$1; shift; if "$@"; then ok; else fail "$msg"; fi; }
+absent() { ! grep -qiE "$1" "$2"; }
+dupes() { cut -d: -f1 | tr '[:upper:]' '[:lower:]' | grep -v '^$' | sort | uniq -d | tr '\n' ' '; }
+
+status()   { check "status $(head -1 "$HDRS" | cut -d' ' -f2), want $1" grep -q "^HTTP/[0-9.]* $1" "$HDRS"; }
+has()      { check "missing response header $1${2:+ ~ $2}" grep -qiE "^$1: ${2:-.*}" "$HDRS"; }
+lacks()    { check "unexpected response header $1" absent "^$1:" "$HDRS"; }
+no_dupes() { local d; d=$(sed 1d "$HDRS" | dupes); check "duplicate response headers: $d" test -z "$d"; }
+
+# Upstream (echo body) assertions: what nginx forwarded to the backend.
+proxied()     { check "request did not reach the upstream" grep -qi '^host:' "$BODY"; }
+up_has()      { check "upstream did not receive $1${2:+ ~ $2}" grep -qiE "^$1: ${2:-.*}" "$BODY"; }
+up_lacks()    { check "upstream received $1${2:+ ~ $2}" absent "^$1: ${2:-.*}" "$BODY"; }
+up_no_dupes() { local d; d=$(dupes < "$BODY"); check "duplicate upstream headers: $d" test -z "$d"; }
+
+# Baseline security headers every HTTPS response must carry.
+secure() { has Strict-Transport-Security; has X-Content-Type-Options nosniff; has Alt-Svc 'h3='; no_dupes; }
+
+echo "Runtime tests:"
+
+# --- every template is served -------------------------------------------------
+req your-app.com /;                          status 200; proxied
+req your-docker-app.com /api/x;              status 200; proxied
+req grafana.example.com /;                   status 200; proxied
+req netbox.example.com /;                    status 200; proxied
+req api.example.com /orders/1;               status 200; proxied
+
+echo "Summary: $PASS passed, $FAIL failed"
+[ "$FAIL" -eq 0 ]
