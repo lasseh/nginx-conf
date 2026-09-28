@@ -54,6 +54,7 @@ grep -rhoE '^[[:space:]]*root[[:space:]]+[^;$]+' "$ETC"/sites-available |
         echo '//' > "$root/app.js"
         echo 'User-agent: *' > "$root/robots.txt"
         : > "$root/favicon.ico"
+        : > "$root/font.woff2"
     done
 
 nginx -t

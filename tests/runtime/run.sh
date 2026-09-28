@@ -99,6 +99,11 @@ req api.example.com /analytics/reports/x;    status 200; proxied; secure; has Ca
 # not caught by a stray `\.json$` deny.
 req api.example-site.com /users/1.json;      status 200; proxied; secure
 req example-site.com /manifest.json;         status 200; secure; has Content-Security-Policy
+# Nested font location adds CORS only; Cache-Control comes from its parent once.
+req example-site.com /font.woff2;            status 200; secure; has Access-Control-Allow-Origin; has Cache-Control immutable
+# stub_status inside an HTTPS server with security headers: one X-Frame-Options.
+req admin.your-load-balanced-app.com /nginx_status
+                                             status 200; secure; has X-Frame-Options SAMEORIGIN
 # Admin assets go to admin_app, not a static-files regex location.
 req admin.example-site.com /app.js;          status 200; proxied; secure
 
