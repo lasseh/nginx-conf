@@ -27,6 +27,7 @@ With `merge`, these patterns in your own vhosts now send duplicate headers. Remo
 
 ### Added
 - `make test` / `make lint`: `scripts/validate.sh` (`nginx -t` on every template, snippet and nginx.conf) and `tests/runtime/` (all templates enabled together in Docker, asserting response headers, upstream-received headers, exporter and Alloy metrics).
+- GitHub Actions CI (`.github/workflows/ci.yml`): lint, `make validate-docker` (`scripts/validate.sh` inside `nginx:mainline`) and the runtime tests on every push to main and pull request, plus a weekly run.
 
 ## [2.0.0] - 2025-01-10
 

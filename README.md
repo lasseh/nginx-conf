@@ -262,11 +262,17 @@ sudo nginx -t
 
 ### Repository Tests
 ```bash
-make validate       # nginx -t on every template, every snippet and nginx.conf (local nginx)
-make test-runtime   # all templates enabled together in Docker, curl assertions
-make test           # both
-make lint           # shellcheck
+make validate         # nginx -t on every template, every snippet and nginx.conf (local nginx)
+make validate-docker  # the same, inside nginx:mainline (no local nginx needed)
+make test-runtime     # all templates enabled together in Docker, curl assertions
+make test             # validate + test-runtime
+make lint             # shellcheck
 ```
+GitHub Actions (`.github/workflows/ci.yml`) runs `lint`, `validate-docker` and
+`test-runtime` on every push to main and pull request, and weekly to catch
+breakage from new upstream image releases.
+
+
 `make test-runtime` checks behaviour `nginx -t` cannot see: which headers each
 location returns (security headers, CSP, Alt-Svc, CORS on preflights, no
 duplicates) and which headers each upstream receives.

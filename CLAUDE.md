@@ -11,11 +11,14 @@ Production-ready, modular nginx configuration for multi-site hosting with securi
 ```bash
 make test                    # validate (nginx -t per template) + test-runtime (Docker, curl assertions)
 make lint                    # shellcheck scripts/ and tests/runtime/
+make validate-docker         # validate inside nginx:mainline — what CI runs instead of validate
 sudo nginx -t                # On a host: test syntax (run after every change)
 sudo nginx -s reload         # Graceful reload (no downtime)
 ```
 
 `make test-runtime` (`tests/runtime/`) enables every template at once in `nginx:mainline`, points all upstreams at an echo stub, and asserts response headers and upstream-received headers. Add an assertion to `tests/runtime/run.sh` for any header/routing behaviour you change — `nginx -t` can't see those bugs.
+
+CI (`.github/workflows/ci.yml`) runs `make lint`, `make validate-docker` and `make test-runtime` as three jobs on push to main, pull requests, and a weekly cron (the test images are rolling tags). A new Make target is not in CI until a job calls it.
 
 ## Architecture
 
