@@ -37,7 +37,7 @@ Thank you for your interest in contributing to this modern nginx configuration r
 - Test all example commands
 
 ### Testing
-- Run `make test` (`make validate` + `make test-runtime`) and `make lint`
+- Run `make test` (`make validate` + `make test-runtime`) and `make lint`; CI runs the same checks on every pull request (`make validate-docker` if you have no local nginx)
 - Add an assertion to `tests/runtime/run.sh` for header or routing behaviour you change
 - Verify SSL/TLS settings with SSL Labs
 - Test rate limiting and security headers

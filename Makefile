@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f tests/runtime/compose.yaml
 
-.PHONY: test validate test-runtime lint
+.PHONY: test validate validate-docker test-runtime lint
 
 ## test: syntax-check every template, then run the behaviour tests
 test: validate test-runtime
@@ -8,6 +8,10 @@ test: validate test-runtime
 ## validate: nginx -t on each template and the combined entrypoint (local nginx)
 validate:
 	scripts/validate.sh
+
+## validate-docker: the same checks inside nginx:mainline (no local nginx; used by CI)
+validate-docker:
+	docker run --rm -v "$(CURDIR):/src:ro" nginx:mainline bash /src/scripts/validate.sh
 
 ## test-runtime: all templates enabled together in nginx:mainline, curl assertions
 test-runtime:
